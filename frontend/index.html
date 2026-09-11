@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Goulash поиск поставщиков</title>
+    <link rel="icon" href="logo.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <header class="top">
+      <a class="brand" href="https://goulash.tech" target="_blank" rel="noopener" title="Goulash.tech">
+        <img src="logo.svg" alt="Goulash.tech" width="34" height="34" />
+      </a>
+      <h1>Goulash поиск поставщиков</h1>
+    </header>
+
+    <form id="search" class="card">
+      <select id="category"></select>
+      <select id="place"></select>
+      <button id="run">Найти</button>
+    </form>
+
+    <p id="status" class="small"></p>
+    <div id="results"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

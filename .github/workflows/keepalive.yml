@@ -1,0 +1,19 @@
+name: keepalive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ping site
+        run: |
+          if [ -z "${{ vars.SITE_URL }}" ]; then
+            echo "SITE_URL не задан, пропускаю"
+            exit 0
+          fi
+          curl -sSf --max-time 60 "${{ vars.SITE_URL }}/api/options" > /dev/null
+          echo "сайт отвечает"
