@@ -4,7 +4,7 @@ services:
     runtime: docker
     plan: free
     region: frankfurt
-    branch: v2
+    branch: main
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/meta
     autoDeploy: true

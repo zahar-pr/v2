@@ -10,9 +10,10 @@
 контакту», чтобы было понятно, кому звонить первым. Данные живые, ничего не
 выдумано, у каждой карточки есть ссылка на источник.
 
-Версия v1 заморожена тегом `v1` в github.com/zahar-pr/goulash-find (ветка
-`main`, один коммит `init`). Её трогать нельзя. Работа идёт в папке `system-v2`,
-ветка `v2`.
+Версия v1 заморожена в github.com/zahar-pr/goulash-find (ветка `main`, один
+коммит `init`), её трогать нельзя. v2 живёт отдельным репозиторием
+github.com/zahar-pr/v2, ветка `main`; локально это папка `system v2`, remote
+`origin` смотрит на v2, remote `v1` — на старый репозиторий.
 
 ## Стек и запуск
 
@@ -248,14 +249,14 @@ ISO 22000, халяль, ветеринарные), минимальный за�
 фильтрами — 9 мс, потребление 76 МБ памяти.
 
 Конфигурация — `render.yaml` (blueprint): `runtime: docker`, `plan: free`,
-регион `frankfurt`, ветка `v2`, healthcheck на `/api/meta`. `PORT` Render
+регион `frankfurt`, ветка `main`, healthcheck на `/api/meta`. `PORT` Render
 подставляет сам, энтрипоинт его читает.
 
 Порядок публикации:
 
-1. `git push -u origin v2`
+1. `git push origin main`
 2. render.com -> Sign up with GitHub -> New -> Blueprint -> репозиторий
-   `goulash-find`, ветка `v2` -> Apply. Сборка около 5 минут.
+   `zahar-pr/v2`, ветка `main` -> Apply. Сборка около 5 минут.
 3. В настройках GitHub-репозитория задать переменную `SITE_URL` =
    `https://provizia.onrender.com` (или тот адрес, что выдаст Render).
 
