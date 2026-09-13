@@ -1,30 +1,17 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Goulash поиск поставщиков</title>
-    <link rel="icon" href="logo.svg" />
-    <link rel="stylesheet" href="styles.css" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Провизия — поиск и сравнение поставщиков food-направления</title>
+    <meta name="description" content="Каталог поставщиков продуктов, ингредиентов и упаковки: минимальный заказ, цены, документы, доставка, контакты и сравнение до трёх компаний." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600&display=swap" rel="stylesheet" />
   </head>
-
   <body>
-    <header class="top">
-      <a class="brand" href="https://goulash.tech" target="_blank" rel="noopener" title="Goulash.tech">
-        <img src="logo.svg" alt="Goulash.tech" width="34" height="34" />
-      </a>
-      <h1>Goulash поиск поставщиков</h1>
-    </header>
-
-    <form id="search" class="card">
-      <select id="category"></select>
-      <select id="place"></select>
-      <button id="run">Найти</button>
-    </form>
-
-    <p id="status" class="small"></p>
-    <div id="results"></div>
-
-    <script src="app.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

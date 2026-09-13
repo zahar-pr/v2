@@ -1,13 +1,15 @@
 from abc import ABC, abstractmethod
 
-from catalog import Category
-from domain import Supplier
+from catalog import City
 
 
 class SupplierSource(ABC):
     id: str
     title: str
 
+    def ready(self) -> bool:
+        return True
+
     @abstractmethod
-    async def search(self, category: Category, place: str) -> list[Supplier]:
+    async def collect(self, session, city: City) -> list[dict]:
         pass

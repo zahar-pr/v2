@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: provizia
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: v2
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/meta
+    autoDeploy: true
+    envVars:
+      - key: DB_PATH
+        value: /app/data/provizia.db
+      - key: PYTHONUNBUFFERED
+        value: "1"

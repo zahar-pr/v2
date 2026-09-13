@@ -15,5 +15,5 @@ jobs:
             echo "SITE_URL не задан, пропускаю"
             exit 0
           fi
-          curl -sSf --max-time 60 "${{ vars.SITE_URL }}/api/options" > /dev/null
+          curl -sSf --max-time 60 "${{ vars.SITE_URL }}/api/meta" > /dev/null
           echo "сайт отвечает"

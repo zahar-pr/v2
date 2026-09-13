@@ -1,18 +1,32 @@
 import re
-from dataclasses import dataclass
 
-WHOLESALE_WORDS = re.compile(r"опт|завод|комбинат|фабрик|производ|склад|торговый дом|агро", re.I)
+WHOLESALE_WORDS = re.compile(
+    r"опт|завод|комбинат|фабрик|производ|склад|торговый дом|агро|дистрибьют|поставщик|база",
+    re.I,
+)
 NON_FOOD_WORDS = re.compile(
-    r"металл|подшипник|автозапчаст|строит|сантехник|мебел|текстил|инструмент|шин[ыа]|bearing|ювелир|аптек",
+    r"металл|подшипник|автозапчаст|строит|сантехник|мебел|текстил|инструмент|шин[ыа]|"
+    r"bearing|ювелир|аптек|одежд|обув|космети|бытов[ао]я хими|электрон|телефон",
+    re.I,
+)
+FOOD_WORDS = re.compile(
+    r"продукт|пищев|провиз|бакале|молок|молочн|сыр|масло|мяс|колбас|рыб|море|хлеб|пекарн|"
+    r"выпечк|кондитер|конфет|шоколад|торт|сладост|напитк|вод[аыу]|сок|пиво|чай|кофе|"
+    r"овощ|фрукт|зелен|ягод|специ|припра|мука|круп|зерн|яйц|птиц|заморозк|полуфабрикат|"
+    r"кулинар|общепит|horeca|хорека|food|агро|ферм|сельхоз|упаковк|тар[аы]|гофр|посуд|"
+    r"фасовк|ингредиент|сырь[ёе]|деликатес|консерв|сухофрукт|орех|мед\b|дрожж|соус|"
+    r"майонез|кетчуп|сахар|соль|снек|чипс",
     re.I,
 )
 CRITERIA = (
-    (30, lambda s: bool(s.phones), "есть телефон", "нет телефона"),
-    (20, lambda s: bool(s.website), "есть сайт", "нет сайта"),
-    (20, lambda s: s.wholesale, "опт или производство", "похоже на розницу"),
-    (15, lambda s: bool(s.emails), "есть email", "нет email"),
-    (10, lambda s: bool(s.address), "есть адрес", "нет адреса"),
-    (5, lambda s: bool(s.hours), "указаны часы работы", "часы работы неизвестны"),
+    (25, lambda s: bool(s.get("phones")), "есть телефон", "нет телефона"),
+    (15, lambda s: bool(s.get("website")), "есть сайт", "нет сайта"),
+    (15, lambda s: bool(s.get("emails")), "есть email", "нет email"),
+    (15, lambda s: bool(s.get("wholesale")), "опт или производство", "похоже на розницу"),
+    (10, lambda s: bool(s.get("certs")), "есть документы", "документы не найдены"),
+    (7, lambda s: bool(s.get("inn") or s.get("ogrn")), "есть реквизиты", "нет реквизитов"),
+    (8, lambda s: bool(s.get("address")), "есть адрес", "нет адреса"),
+    (5, lambda s: bool(s.get("hours")), "указаны часы работы", "часы работы неизвестны"),
 )
 VERDICTS = (
     (65, "high", "Звонить первым"),
@@ -29,31 +43,6 @@ class SourceUnavailable(Exception):
     pass
 
 
-@dataclass
-class Rating:
-    score: int
-    level: str
-    verdict: str
-    plus: list[str]
-    minus: list[str]
-
-
-@dataclass
-class Supplier:
-    name: str
-    kind: str
-    address: str
-    phones: list[str]
-    emails: list[str]
-    website: str
-    hours: str
-    wholesale: bool
-    source: str
-    source_title: str
-    branches: int = 1
-    rating: Rating | None = None
-
-
 def looks_wholesale(name: str) -> bool:
     return bool(WHOLESALE_WORDS.search(name))
 
@@ -62,7 +51,15 @@ def is_food_related(name: str) -> bool:
     return not NON_FOOD_WORDS.search(name)
 
 
-def rate(supplier: Supplier) -> Rating:
+def looks_food(text: str) -> bool:
+    return bool(FOOD_WORDS.search(text))
+
+
+def name_key(name: str) -> str:
+    return re.sub(r"[^a-zа-я0-9]", "", name.lower())
+
+
+def rate(supplier: dict) -> dict:
     score, plus, minus = 0, [], []
     for points, check, good, bad in CRITERIA:
         if check(supplier):
@@ -71,4 +68,24 @@ def rate(supplier: Supplier) -> Rating:
         else:
             minus.append(bad)
     level, verdict = next((level, text) for limit, level, text in VERDICTS if score >= limit)
-    return Rating(score=score, level=level, verdict=verdict, plus=plus, minus=minus)
+    return {
+        "score": score,
+        "level": level,
+        "verdict": verdict,
+        "plus": plus,
+        "minus": minus,
+        "rating": round(score / 20, 1),
+    }
+
+
+def haystack(supplier: dict) -> str:
+    parts = [
+        supplier.get("name", ""),
+        supplier.get("kind", ""),
+        supplier.get("city", ""),
+        supplier.get("region", ""),
+        supplier.get("address", ""),
+        supplier.get("website", ""),
+        " ".join(supplier.get("cats_titles", [])),
+    ]
+    return " ".join(part for part in parts if part).lower()

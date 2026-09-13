@@ -4,3 +4,7 @@ __pycache__/
 .git/
 .idea/
 .claude/
+node_modules/
+frontend/dist/
+data/
+!data/seed.db

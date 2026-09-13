@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .claude/
 .idea/
+node_modules/
+frontend/dist/
+data/*
+!data/seed.db
