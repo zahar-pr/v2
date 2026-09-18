@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import StatusPicker from './StatusPicker.jsx';
-import { checkedAt, dash, distanceOf, plural } from '../data/suppliers.js';
+import { checkedAt, dash, placeOf, plural, ratingOf } from '../data/suppliers.js';
 
 export default function SupplierPanel({
   supplier, note, statuses, onNote, onStatus, inCompare, compareFull, onCompare, onClose,
@@ -22,7 +22,7 @@ export default function SupplierPanel({
   const facts = [
     ['Тип поставщика', s.typeTitle],
     ['Категории', s.cats.join(', ')],
-    ['Город', [s.city, distanceOf(s)].filter(Boolean).join(', ')],
+    ['Где находится', placeOf(s) || '—'],
     ...(s.address && s.address !== s.city ? [['Адрес', s.address]] : []),
     ['Часы работы', dash(s.hours)],
     ...(s.branches > 1 ? [['Точек в городе', String(s.branches)]] : []),
@@ -35,10 +35,12 @@ export default function SupplierPanel({
 
   const legal = [
     ['Юрлицо', dash(s.legalName)],
+    ['Статус в ФНС', dash(s.legalStatus)],
+    ['Основной ОКВЭД', dash([s.okved, s.okvedName].filter(Boolean).join(' · '))],
     ['Руководитель', dash(s.legalHead)],
     ['ИНН', dash(s.inn)],
     ['ОГРН', dash(s.ogrn)],
-    ['Регистрация', dash(s.legalRegistered)],
+    ['На рынке', dash(s.years)],
   ];
 
   return (
@@ -150,6 +152,32 @@ export default function SupplierPanel({
                   <div className="facts__k">{k}</div>
                   <div className="facts__v">{v}</div>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="section-title">Отзывы и оценки</div>
+            {ratingOf(s) ? (
+              <div className="reviews">
+                <div className="reviews__score">{s.rating.toFixed(1)}</div>
+                <div>
+                  <div className="reviews__count">
+                    {s.reviews} {plural(s.reviews, 'отзыв', 'отзыва', 'отзывов')}
+                  </div>
+                  <small>по данным подключённых справочников</small>
+                </div>
+              </div>
+            ) : (
+              <div className="reviews reviews--empty">
+                Оценок в подключённых источниках нет. Откройте отзывы и решите сами:
+              </div>
+            )}
+            <div className="sources">
+              {s.reviewLinks.map((item) => (
+                <a className="source" key={item.url} href={item.url} target="_blank" rel="noreferrer">
+                  {item.title} ↗
+                </a>
               ))}
             </div>
           </div>

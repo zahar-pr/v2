@@ -13,6 +13,13 @@ FORMS = re.compile(
     re.I,
 )
 NOISE = re.compile(r"[^а-яёa-z0-9]+", re.I)
+NON_COMMERCIAL = re.compile(
+    r"\b(профком|профсоюз|снт\b|тсж|тсн|гск|жск|дск|товарищество собственник|"
+    r"садов\w+ некоммерч|первичная организация|фонд\b|ассоциация|союз\b|"
+    r"учреждение|администрация|управление|комитет|музей|школа|детский сад|"
+    r"общежитие|казенное|бюджетное|автономная некоммерч|партия|церковь|приход)",
+    re.I,
+)
 ROLE = re.compile(r"^([^:]{3,60}):\s*(.+)$")
 
 
@@ -142,3 +149,88 @@ def _plural(n: int) -> str:
     if 2 <= n % 10 <= 4 and not 10 <= n % 100 < 20:
         return "года"
     return "лет"
+
+
+DISCOVERY = (
+    ("хлебозавод", "bakery", "producer"),
+    ("хлебокомбинат", "bakery", "producer"),
+    ("кондитерская фабрика", "confectionery", "producer"),
+    ("мясокомбинат", "meat", "producer"),
+    ("птицефабрика", "meat", "producer"),
+    ("молочный комбинат", "dairy", "producer"),
+    ("молокозавод", "dairy", "producer"),
+    ("сыродельный", "dairy", "producer"),
+    ("рыбокомбинат", "fish", "producer"),
+    ("консервный завод", "vegetables", "producer"),
+    ("овощная база", "vegetables", "wholesale"),
+    ("агрофирма", "vegetables", "producer"),
+    ("мукомольный", "grain", "producer"),
+    ("элеватор", "grain", "producer"),
+    ("пивоваренный завод", "drinks", "producer"),
+    ("завод напитков", "drinks", "producer"),
+    ("пищевой комбинат", "wholesale", "producer"),
+    ("оптовая база", "wholesale", "wholesale"),
+    ("продукты оптом", "wholesale", "wholesale"),
+    ("гофротара", "packaging", "producer"),
+    ("упаковка пищевая", "packaging", "producer"),
+)
+
+
+async def discover(session, query: str, region_code: str, page: int = 1) -> list[dict]:
+    payload = {
+        "vyp3CaptchaToken": "",
+        "page": str(page),
+        "query": query,
+        "region": region_code,
+        "PreparedQuery": "",
+    }
+    try:
+        async with session.post(SEARCH_URL, data=payload) as response:
+            answer = await response.json(content_type=None)
+    except Exception:
+        return []
+
+    token = answer.get("t")
+    if not token or answer.get("captchaRequired"):
+        return []
+
+    for _ in range(ATTEMPTS):
+        await asyncio.sleep(PAUSE)
+        try:
+            async with session.get(RESULT_URL.format(token=token)) as response:
+                answer = await response.json(content_type=None)
+        except Exception:
+            return []
+        rows = answer.get("rows") or []
+        if rows:
+            return [
+                row for row in rows if row.get("k") == "ul" and row.get("i") and is_commercial(row)
+            ]
+    return []
+
+
+def display_name(row: dict) -> str:
+    raw = (row.get("c") or row.get("n") or "").strip()
+    return pretty(raw)
+
+
+def pretty(raw: str) -> str:
+    clean = FORMS.sub("", raw).strip(' "«»').strip()
+    if not clean:
+        clean = raw.strip(' "«»').strip()
+    if not clean.isupper():
+        return clean
+    words = []
+    for word in clean.split():
+        letters = [i for i, ch in enumerate(word) if ch.isalpha()]
+        if not letters:
+            words.append(word)
+            continue
+        first = letters[0]
+        words.append(word[:first] + word[first] + word[first + 1 :].lower())
+    return " ".join(words)
+
+
+def is_commercial(row: dict) -> bool:
+    name = f"{row.get('c') or ''} {row.get('n') or ''}"
+    return not NON_COMMERCIAL.search(name)

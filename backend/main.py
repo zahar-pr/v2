@@ -35,6 +35,7 @@ async def lifespan(_app: FastAPI):
         _workers.append(asyncio.create_task(index.prewarm()))
         _workers.append(asyncio.create_task(index.enrich_forever()))
         _workers.append(asyncio.create_task(index.egrul_forever()))
+        _workers.append(asyncio.create_task(index.fns_forever()))
     yield
     for task in _workers:
         task.cancel()
@@ -104,6 +105,7 @@ def _sources_meta() -> list[dict]:
     ]
     listed.append({"id": "website", "title": "Сайты поставщиков", "active": True})
     listed.append({"id": "egrul", "title": "ЕГРЮЛ (ФНС)", "active": True})
+    listed.append({"id": "fns", "title": "ФНС: Прозрачный бизнес", "active": True})
     listed.append({"id": "wikidata", "title": "Wikidata", "active": True})
     return listed
 

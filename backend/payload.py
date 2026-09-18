@@ -175,7 +175,13 @@ def card(row: dict, notes: dict, statuses: dict, weights: dict, rank: int = 0) -
         "branches": row.get("branches", 1),
         "inn": row.get("inn", ""),
         "ogrn": row.get("ogrn", ""),
-        "legalName": row.get("egrul_name", ""),
+        "area": row.get("area", ""),
+        "okved": row.get("okved", ""),
+        "okvedName": row.get("okved_name", ""),
+        "legalStatus": row.get("legal_status", ""),
+        "legalActive": bool(row.get("legal_active")),
+        "reviewLinks": _review_links(row),
+        "legalName": row.get("legal_name") or row.get("egrul_name", ""),
         "legalHead": row.get("egrul_head", ""),
         "legalRegistered": row.get("egrul_registered", ""),
         "legalClosed": bool(row.get("egrul_closed")),
@@ -188,9 +194,20 @@ def card(row: dict, notes: dict, statuses: dict, weights: dict, rank: int = 0) -
     }
 
 
+def _review_links(row: dict) -> list[dict]:
+    name = row.get("name", "")
+    where = row.get("city") or row.get("area") or ""
+    pair = quote(f"{name} {where}".strip())
+    return [
+        {"title": "Отзывы в Яндексе", "url": f"https://yandex.ru/search/?text={pair}%20отзывы"},
+        {"title": "Отзывы в 2ГИС", "url": f"https://2gis.ru/search/{pair}"},
+        {"title": "Отзывы на Flamp", "url": f"https://flamp.ru/search/{pair}"},
+    ]
+
+
 def _check_links(row: dict) -> list[dict]:
     name = row.get("name", "")
-    city = row.get("city", "")
+    city = row.get("city") or row.get("area") or ""
     pair = quote(f"{name} {city}".strip())
     links = [
         {"title": "Найти в Яндексе", "url": f"https://yandex.ru/search/?text={pair}%20телефон"},
@@ -233,6 +250,9 @@ EXPORT_COLUMNS = (
     ("Доставка", lambda c: c["delivery"]),
     ("Документы", lambda c: ", ".join(c["certs"])),
     ("Юрлицо", lambda c: c["legalName"]),
+    ("Статус в ФНС", lambda c: c["legalStatus"]),
+    ("ОКВЭД", lambda c: f'{c["okved"]} {c["okvedName"]}'.strip()),
+    ("На рынке", lambda c: c["years"]),
     ("Руководитель", lambda c: c["legalHead"]),
     ("ИНН", lambda c: c["inn"]),
     ("ОГРН", lambda c: c["ogrn"]),

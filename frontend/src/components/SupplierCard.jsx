@@ -1,7 +1,7 @@
 import React from 'react';
 import FactorStrip from './FactorStrip.jsx';
 import StatusPicker from './StatusPicker.jsx';
-import { distanceOf, plural, strongest, weakest } from '../data/suppliers.js';
+import { placeOf, plural, ratingOf, strongest, weakest } from '../data/suppliers.js';
 
 export default function SupplierCard({
   supplier, index, statuses, inCompare, compareFull, onOpen, onCompare, onStatus,
@@ -25,9 +25,7 @@ export default function SupplierCard({
       <div className="card__head">
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="card__title">{s.name}</div>
-          <div className="card__sub">
-            {[s.city, distanceOf(s)].filter(Boolean).join(' · ')}
-          </div>
+          <div className="card__sub">{placeOf(s)}</div>
         </div>
         <div className="card__rate">
           <div className={`prio prio--${s.level}`} title="Приоритет звонка по вашим настройкам">
@@ -39,6 +37,12 @@ export default function SupplierCard({
 
       <div className="tags">
         <span className={`tag tag--${s.type}`}>{s.typeTitle}</span>
+        {ratingOf(s) && (
+          <span className="tag tag--rating">
+            ★ {s.rating.toFixed(1)} · {s.reviews} {plural(s.reviews, 'отзыв', 'отзыва', 'отзывов')}
+          </span>
+        )}
+        {s.legalActive && <span className="tag tag--ok">действующее юрлицо</span>}
         {s.cats.slice(0, 2).map((c) => <span className="tag" key={c}>{c}</span>)}
         {s.verified && <span className="tag tag--ok">данные подтверждены</span>}
       </div>
@@ -69,6 +73,12 @@ export default function SupplierCard({
           </div>
         </div>
       </div>
+
+      {s.okved && (
+        <div className="card__okved" title="Основной вид деятельности по данным ФНС">
+          ОКВЭД {s.okved} · {s.okvedName}
+        </div>
+      )}
 
       {!s.phone && !s.email && s.checkLinks.length > 0 && (
         <a

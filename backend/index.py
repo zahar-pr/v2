@@ -6,7 +6,7 @@ import catalog
 import db
 import domain
 import scoring
-from sources import active, egrul, website, wikidata
+from sources import active, egrul, fns, website, wikidata
 
 USER_AGENT = "ProviziaBot/1.0 (+https://github.com/zahar-pr/v2)"
 REFRESH_TTL = 7 * 24 * 3600
@@ -17,6 +17,9 @@ ENRICH_PARALLEL = 6
 ENRICH_PAUSE = 4.0
 EGRUL_BATCH = 8
 EGRUL_PAUSE = 6.0
+FNS_BATCH = 10
+FNS_PAUSE = 3.0
+DISCOVER_PAGES = 3
 
 state = {
     "indexing": False,
@@ -26,6 +29,8 @@ state = {
     "enriching": False,
     "enriched": 0,
     "egrul": 0,
+    "fns": 0,
+    "found": 0,
     "errors": [],
 }
 _locks: dict[str, asyncio.Lock] = {}
@@ -280,3 +285,306 @@ async def egrul_one(client, supplier: dict) -> None:
 def _chunks(items: list, size: int):
     for start in range(0, len(items), size):
         yield items[start : start + size]
+
+
+async def fns_forever() -> None:
+    try:
+        async with session() as client:
+            await _warm_fns(client)
+            await discover_registry(client)
+            while True:
+                pending = db.pending_fns(FNS_BATCH)
+                if not pending:
+                    await asyncio.sleep(180)
+                    continue
+                for supplier in pending:
+                    await fns_one(client, supplier)
+                    await asyncio.sleep(FNS_PAUSE)
+    except asyncio.CancelledError:
+        raise
+
+
+async def _warm_fns(client) -> None:
+    try:
+        async with client.get(fns.HOME_URL) as response:
+            await response.read()
+    except Exception:
+        pass
+
+
+async def fns_one(client, supplier: dict) -> None:
+    city = catalog.city(supplier["city"])
+    try:
+        found = await fns.lookup(client, supplier, city.code if city else "")
+    except Exception:
+        found = None
+
+    db.mark_fns_checked(supplier["id"])
+    if not found:
+        return
+
+    db.save_enrichment(supplier["id"], found)
+    fresh = db.get(supplier["id"])
+    if fresh:
+        if not fresh.get("okved"):
+            score_one(fresh)
+            return
+        kind = fns.kind_of(fresh["okved"])
+        cats = _cats_with(fresh, fns.category_of(fresh["okved"]))
+        db.save_kind(supplier["id"], kind, cats)
+        score_one(db.get(supplier["id"]) or fresh)
+    state["fns"] += 1
+
+
+def _cats_with(row: dict, category: str) -> str:
+    known = {item for item in (row.get("cats") or "").split(",") if item}
+    if category:
+        known.add(category)
+    return "," + ",".join(sorted(known)) + "," if known else ""
+
+
+async def discover_registry(client) -> int:
+    added = 0
+    for query in fns.DISCOVERY_QUERIES:
+        for page in range(1, DISCOVER_PAGES + 1):
+            try:
+                rows = await fns.discover(client, "", query, page)
+            except Exception:
+                rows = []
+            if not rows:
+                break
+            added += _save_registry(rows)
+            state["found"] = added
+            await asyncio.sleep(FNS_PAUSE)
+    return added
+
+
+def _save_registry(rows: list[dict]) -> int:
+    fresh: list[dict] = []
+    for row in rows:
+        record = _registry_record(row)
+        if record is None:
+            continue
+        known = db.find_by_inn(record["inn"]) or db.find_by_key(record["name_key"])
+        if known:
+            db.save_enrichment(
+                known["id"],
+                {
+                    "inn": record["inn"],
+                    "ogrn": record["ogrn"],
+                    "okved": record["okved"],
+                    "okved_name": record["okved_name"],
+                    "legal_name": record["legal_name"],
+                    "legal_status": record["legal_status"],
+                    "legal_active": record["legal_active"],
+                    "founded": record["founded"],
+                    "years": record["years"],
+                    "sources": record["sources"],
+                },
+            )
+            row_now = db.get(known["id"])
+            if row_now:
+                score_one(row_now)
+            continue
+        fresh.append(record)
+
+    if fresh:
+        db.save_indexed(fresh)
+        for record in fresh:
+            db.save_enrichment(
+                record["id"],
+                {
+                    "inn": record["inn"],
+                    "ogrn": record["ogrn"],
+                    "okved": record["okved"],
+                    "okved_name": record["okved_name"],
+                    "legal_name": record["legal_name"],
+                    "legal_status": record["legal_status"],
+                    "legal_active": record["legal_active"],
+                    "founded": record["founded"],
+                    "years": record["years"],
+                    "sources": record["sources"],
+                    "haystack": record["haystack"],
+                },
+            )
+            saved = db.get(record["id"])
+            if saved:
+                score_one(saved)
+    return len(fresh)
+
+
+def _registry_record(row: dict) -> dict | None:
+    inn = (row.get("inn") or "").strip()
+    name = fns.display_name(row)
+    okved = (row.get("okved2main") or "").strip()
+    if not inn or not name or not okved:
+        return None
+
+    kind = fns.kind_of(okved)
+    if kind == "retail":
+        return None
+
+    category = fns.category_of(okved)
+    area = catalog.pretty_area(row.get("regionname") or "")
+    founded = None
+    parts = (row.get("dtreg") or "").split(".")
+    if len(parts) == 3 and parts[2].isdigit():
+        founded = int(parts[2])
+
+    record = {
+        "id": f"fns:{inn}",
+        "name": name,
+        "name_key": domain.name_key(name),
+        "city": "",
+        "area": area,
+        "region": catalog.region_by_area(row.get("regionname") or ""),
+        "cats": f",{category}," if category else ",wholesale,",
+        "cats_titles": [catalog.title(category)] if category else [],
+        "kind": (row.get("okved2mainname") or "")[:60],
+        "kind_tag": f"okved={okved}",
+        "kind_class": kind,
+        "address": area,
+        "phones": [],
+        "emails": [],
+        "socials": [],
+        "website": "",
+        "hours": "",
+        "wholesale": kind in ("producer", "wholesale"),
+        "branches": 1,
+        "lat": None,
+        "lon": None,
+        "distance_km": None,
+        "source": fns.CARD_URL.format(token=row.get("token") or ""),
+        "source_title": "ФНС: Прозрачный бизнес",
+        "sources": [
+            {
+                "id": "fns",
+                "title": "ФНС: Прозрачный бизнес",
+                "url": fns.CARD_URL.format(token=row.get("token") or ""),
+            }
+        ],
+        "checked_at": time.time(),
+        "inn": inn,
+        "ogrn": (row.get("ogrn") or "").strip(),
+        "okved": okved,
+        "okved_name": row.get("okved2mainname") or "",
+        "legal_name": row.get("namep") or name,
+        "legal_status": row.get("sulst_name_ex") or "",
+        "legal_active": 0 if row.get("pr_liq") == "1" else 1,
+        "founded": founded,
+        "years": (
+            f"{2026 - founded} {fns._plural(2026 - founded)} (с {founded})" if founded else ""
+        ),
+    }
+    record["haystack"] = " ".join(
+        [domain.haystack(record), okved, record["okved_name"], area, record["legal_name"]]
+    ).lower()[:2000]
+    return record
+
+
+async def discover_egrul(client, pages: int = 2) -> int:
+    added = 0
+    for query, category, kind in egrul.DISCOVERY:
+        for page in range(1, pages + 1):
+            try:
+                rows = await egrul.discover(client, query, "", page)
+            except Exception:
+                rows = []
+            if not rows:
+                break
+            added += _save_egrul(rows, category, kind)
+            state["found"] = added
+            await asyncio.sleep(2.5)
+    return added
+
+
+def _save_egrul(rows: list[dict], category: str, kind: str) -> int:
+    fresh: list[dict] = []
+    for row in rows:
+        record = _egrul_record(row, category, kind)
+        if record is None:
+            continue
+        if db.find_by_inn(record["inn"]) or db.find_by_key(record["name_key"]):
+            continue
+        fresh.append(record)
+
+    if fresh:
+        db.save_indexed(fresh)
+        for record in fresh:
+            db.save_enrichment(
+                record["id"],
+                {
+                    "inn": record["inn"],
+                    "ogrn": record["ogrn"],
+                    "legal_name": record["legal_name"],
+                    "legal_status": record["legal_status"],
+                    "legal_active": record["legal_active"],
+                    "manager": record["manager"],
+                    "founded": record["founded"],
+                    "years": record["years"],
+                    "sources": record["sources"],
+                    "haystack": record["haystack"],
+                },
+            )
+            saved = db.get(record["id"])
+            if saved:
+                score_one(saved)
+    return len(fresh)
+
+
+def _egrul_record(row: dict, category: str, kind: str) -> dict | None:
+    inn = (row.get("i") or "").strip()
+    name = egrul.display_name(row)
+    if not inn or len(name) < 3:
+        return None
+
+    closed = bool(row.get("e") and row.get("e") != row.get("r"))
+    area = catalog.pretty_area((row.get("rn") or "").replace("Г.", "").split("(")[0].strip())
+    founded = None
+    parts = (row.get("r") or "").split(".")
+    if len(parts) == 3 and parts[2].isdigit():
+        founded = int(parts[2])
+
+    url = egrul.CARD_URL.format(query=inn)
+    record = {
+        "id": f"egrul:{inn}",
+        "name": name,
+        "name_key": domain.name_key(name),
+        "city": "",
+        "area": area,
+        "region": catalog.region_by_area(area),
+        "cats": f",{category},",
+        "cats_titles": [catalog.title(category)],
+        "kind": catalog.title(category),
+        "kind_tag": "egrul",
+        "kind_class": kind,
+        "address": area,
+        "phones": [],
+        "emails": [],
+        "socials": [],
+        "website": "",
+        "hours": "",
+        "wholesale": kind in ("producer", "wholesale"),
+        "branches": 1,
+        "lat": None,
+        "lon": None,
+        "distance_km": None,
+        "source": url,
+        "source_title": "ЕГРЮЛ (ФНС)",
+        "sources": [{"id": "egrul", "title": "ЕГРЮЛ (ФНС)", "url": url}],
+        "checked_at": time.time(),
+        "inn": inn,
+        "ogrn": (row.get("o") or "").strip(),
+        "legal_name": row.get("n") or name,
+        "legal_status": "Есть запись о прекращении" if closed else "Действующая организация",
+        "legal_active": 0 if closed else 1,
+        "manager": egrul._head(row.get("g") or ""),
+        "founded": founded,
+        "years": (
+            f"{2026 - founded} {egrul._plural(2026 - founded)} (с {founded})" if founded else ""
+        ),
+    }
+    record["haystack"] = " ".join([domain.haystack(record), area, record["legal_name"]]).lower()[
+        :2000
+    ]
+    return record

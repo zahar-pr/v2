@@ -10,6 +10,15 @@ export function plural(n, one, few, many) {
   return many;
 }
 
+export function placeOf(s) {
+  return [s.city || s.area, distanceOf(s)].filter(Boolean).join(' · ');
+}
+
+export function ratingOf(s) {
+  if (!s.reviews || !s.rating) return null;
+  return { rating: s.rating.toFixed(1), reviews: s.reviews };
+}
+
 export function distanceOf(s) {
   if (s.distanceKm === null || s.distanceKm === undefined) return '';
   return `${Math.round(s.distanceKm)} км от центра`;
@@ -43,7 +52,10 @@ export function weightsToString(weights) {
 export const COMPARE_ROWS = [
   { label: 'Приоритет звонка', get: (s) => `${s.score} из 100 · ${dash(s.verdict)}`, mint: true },
   { label: 'Тип поставщика', get: (s) => dash(s.typeTitle) },
-  { label: 'Город', get: (s) => [s.city, distanceOf(s)].filter(Boolean).join(', ') },
+  { label: 'Город', get: (s) => placeOf(s) || '—' },
+  { label: 'Отзывы', get: (s) => (ratingOf(s) ? `${s.rating} из 5 по ${s.reviews} отзывам` : 'нет в подключённых источниках') },
+  { label: 'Статус в ФНС', get: (s) => dash(s.legalStatus) },
+  { label: 'ОКВЭД', get: (s) => dash([s.okved, s.okvedName].filter(Boolean).join(' ')) },
   { label: 'Регион работы', get: (s) => dash(s.geo || s.region) },
   { label: 'Минимальный заказ', get: (s) => dash(s.moq) },
   { label: 'Цена', get: (s) => dash(s.priceList ? 'прайс-лист на сайте' : s.price) },

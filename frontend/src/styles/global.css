@@ -746,3 +746,162 @@ td.cell--muted { color: var(--text-2); }
   background: rgba(15, 34, 41, 0.08); font-size: 11px;
 }
 .pill--on .pill__count { background: rgba(255, 255, 255, 0.18); }
+
+/* ---------- отзывы и ОКВЭД ---------- */
+
+.tag--rating { background: #fff4d9; color: #8a5a12; }
+.card__okved {
+  font-size: 12px; color: var(--text-3); line-height: 1.45;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.reviews {
+  display: flex; align-items: center; gap: 14px; padding: 13px 15px;
+  background: var(--field); border-radius: 14px; margin-bottom: 10px;
+}
+.reviews__score {
+  flex: none; padding: 6px 12px; border-radius: 12px; background: var(--deep);
+  color: var(--cyan); font-family: var(--font-display); font-size: 20px;
+}
+.reviews__count { font-size: 14px; }
+.reviews small { font-size: 12px; color: var(--text-4); }
+.reviews--empty { display: block; font-size: 13px; color: var(--text-2); }
+
+/* ---------- каталог: фильтры сбоку ---------- */
+
+.catalog__in {
+  display: grid; gap: clamp(14px, 2vw, 22px); align-items: start;
+  grid-template-columns: minmax(240px, 288px) minmax(0, 1fr);
+  margin-top: 18px;
+}
+
+.filters {
+  position: sticky; top: 74px;
+  max-height: calc(100vh - 92px); overflow-y: auto;
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: 20px; padding: 6px 4px;
+}
+.filters__head { display: none; }
+.filters__in { display: grid; gap: 4px; }
+.filters__reset { margin: 6px 12px 12px; flex: none; }
+
+.fgroup { padding: 12px; border-bottom: 1px solid var(--line-hair); }
+.fgroup:last-of-type { border-bottom: none; }
+.fgroup__head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.fgroup__title { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-4); }
+.fgroup__link {
+  margin-left: auto; border: none; background: none; padding: 0;
+  color: var(--cyan-ink); font-size: 12px; cursor: pointer;
+}
+.fgroup__link:hover { color: var(--ink); }
+.fgroup__body { display: grid; gap: 7px; }
+.fgroup__body--row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.preset {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 9px 12px; border-radius: 13px; border: 1px solid transparent;
+  background: var(--field); transition: 0.2s var(--ease);
+}
+.preset:hover { border-color: var(--cyan); }
+.preset--on { background: var(--deep); border-color: var(--deep); }
+.preset__title { display: block; font-size: 14px; color: var(--ink); }
+.preset__hint { display: block; margin-top: 2px; font-size: 11px; color: var(--text-4); line-height: 1.35; }
+.preset--on .preset__title { color: var(--on-deep); }
+.preset--on .preset__hint { color: var(--on-deep-2); }
+
+.check {
+  display: flex; align-items: center; gap: 9px; font-size: 13px;
+  color: var(--text-2); cursor: pointer; padding: 3px 0;
+}
+.check input { width: 17px; height: 17px; accent-color: var(--cyan-ink); cursor: pointer; }
+.check__count {
+  margin-left: auto; padding: 1px 7px; border-radius: 8px;
+  background: var(--field); font-size: 11px; color: var(--text-4);
+}
+
+.results { min-width: 0; }
+.results__bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+.results__count { font-size: 14px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+.results__preset {
+  padding: 3px 10px; border-radius: 20px; background: var(--mint-bg);
+  color: var(--mint-ink); font-size: 12px;
+}
+.filters__toggle { display: none; }
+.scrim--filters { z-index: 59; }
+
+.grid { margin-top: 14px; }
+.summary { margin-top: 12px; }
+
+/* ---------- планшет и мобильный ---------- */
+
+@media (max-width: 960px) {
+  .catalog__in { grid-template-columns: minmax(0, 1fr); }
+
+  .filters {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 60;
+    width: min(92vw, 360px); max-height: none; border-radius: 0 20px 20px 0;
+    padding: 0 0 20px; border: none;
+    transform: translateX(-102%); transition: transform 0.28s var(--ease);
+    overflow-y: auto;
+  }
+  .filters.filters--open {
+    transform: translateX(0);
+    box-shadow: 0 20px 60px rgba(10, 52, 64, 0.28);
+  }
+  .filters__head {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 18px; background: var(--deep); color: var(--on-deep);
+    font-family: var(--font-display); font-size: 18px;
+  }
+  .filters__in { padding: 4px 6px; }
+
+  .filters__toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 16px; border-radius: 14px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+    font-size: 14px;
+  }
+  .filters__toggle:hover { border-color: var(--cyan); }
+}
+
+@media (max-width: 760px) {
+  .header__in { gap: 8px 10px; }
+  .header__found { order: 3; width: 100%; font-size: 13px; }
+  .brand__name { font-size: 18px; }
+  .btn-compare { padding: 9px 13px; font-size: 13px; }
+
+  .search__row { gap: 8px; }
+  .search__field { flex: 1 1 100%; }
+  .dd { flex: 1 1 calc(50% - 4px); }
+
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .card__actions { gap: 8px; }
+  .card__actions .btn { flex: 1 1 calc(50% - 4px); }
+  .status--compact { flex: 1 1 100%; }
+
+  .call { flex-wrap: wrap; }
+  .call__side { flex-direction: row; align-items: center; width: 100%; gap: 10px; flex-wrap: wrap; }
+  .call__side .status { flex: 1 1 140px; }
+
+  .srow__head { flex-wrap: wrap; }
+  .weight__title { flex: 0 0 110px; font-size: 12px; }
+  .more { flex-direction: column; align-items: stretch; }
+  .more .btn { width: 100%; }
+  .reviews { flex-wrap: wrap; }
+}
+
+@media (max-width: 460px) {
+  .fseg__name { display: none; }
+  .fstrip { gap: 3px; }
+  .card { padding: 15px; }
+  .prio { min-width: 40px; font-size: 17px; padding: 6px 8px; }
+  .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cmphead { grid-template-columns: 1fr; }
+  .diff__row { flex-wrap: wrap; gap: 4px 8px; }
+  .diff__factor { flex: 0 0 auto; }
+  .panel__cta { flex-wrap: wrap; }
+  .panel__cta a { flex: 1 1 100%; text-align: center; }
+}

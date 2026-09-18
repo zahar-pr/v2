@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Logo from './components/Logo.jsx';
 import Dropdown from './components/Dropdown.jsx';
-import PriorityBar from './components/PriorityBar.jsx';
+import FiltersPanel from './components/FiltersPanel.jsx';
 import SupplierCard from './components/SupplierCard.jsx';
 import SupplierPanel from './components/SupplierPanel.jsx';
 import CompareModal from './components/CompareModal.jsx';
@@ -59,6 +59,8 @@ export default function App() {
   const [calls, setCalls] = useState([]);
   const [callsLoading, setCallsLoading] = useState(false);
   const [explainOpen, setExplainOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [showWeights, setShowWeights] = useState(false);
   const [notes, setNotes] = useState({});
 
   const narrow = useNarrow();
@@ -261,6 +263,13 @@ export default function App() {
       .catch(() => {});
   };
 
+  const activeFilters = [
+    query, onlyDocs, onlyVerified, onlyContacts, statusFilter,
+    meta && cat !== meta.defaults.category,
+    meta && kinds.join(',') !== meta.defaults.kinds.join(','),
+  ].filter(Boolean).length;
+  const presetTitle = ((meta && meta.presets) || []).find((p) => p.id === preset)?.title || '';
+
   const indexing = Boolean(status && status.indexing);
   const badge = () => {
     if (loading) return 'Подбираем поставщиков';
@@ -348,140 +357,130 @@ export default function App() {
               />
             </div>
 
-            <div className="chips">
-              {((meta && meta.categories) || []).map((c) => (
-                <button
-                  type="button" key={c.id}
-                  className={`chip${cat === c.id ? ' chip--on' : ''}`}
-                  onClick={() => setCat(c.id)}
-                >
-                  {c.title}
-                </button>
-              ))}
-            </div>
           </div>
         </section>
       </div>
 
       <section className="wrap catalog">
-        {meta && (
-          <PriorityBar
-            presets={meta.presets} factors={meta.factors} preset={preset} weights={weights}
-            onPreset={changePreset} onWeights={changeWeights}
-            onExplain={() => setExplainOpen(true)}
-          />
-        )}
-
-        <div className="filterbar">
-          <span className="filterbar__label">Тип</span>
-          {((meta && meta.kinds) || []).map((k) => (
-            <button
-              type="button" key={k.id}
-              className={`pill${kinds.includes(k.id) ? ' pill--on' : ''}`}
-              onClick={() => toggleKind(k.id)}
-            >
-              {k.title}
-              {facets && <span className="pill__count">{facets.types[k.id] || 0}</span>}
-            </button>
-          ))}
-          <label>
-            <input type="checkbox" checked={onlyContacts} onChange={() => setOnlyContacts((v) => !v)} />
-            Есть контакты
-          </label>
-          <label>
-            <input type="checkbox" checked={onlyDocs} onChange={() => setOnlyDocs((v) => !v)} />
-            С документами
-          </label>
-          <label>
-            <input type="checkbox" checked={onlyVerified} onChange={() => setOnlyVerified((v) => !v)} />
-            Подтверждённые
-          </label>
-          {anyFilter && (
-            <button type="button" className="filterbar__reset" onClick={resetAll}>Сбросить фильтры</button>
+        <div className="catalog__in">
+          {filtersOpen && (
+            <button type="button" className="scrim scrim--filters" aria-label="Закрыть фильтры"
+              onClick={() => setFiltersOpen(false)} />
           )}
+
+          <aside className={`filters${filtersOpen ? ' filters--open' : ''}`}>
+            <div className="filters__head">
+              <span>Фильтры</span>
+              <button type="button" className="panel__close" onClick={() => setFiltersOpen(false)}>✕</button>
+            </div>
+            <FiltersPanel
+              meta={meta} preset={preset} weights={weights} cat={cat} kinds={kinds}
+              onlyDocs={onlyDocs} onlyVerified={onlyVerified} onlyContacts={onlyContacts}
+              facets={facets} showWeights={showWeights} anyFilter={anyFilter}
+              onPreset={changePreset} onWeights={changeWeights}
+              onToggleWeights={() => setShowWeights((v) => !v)}
+              onExplain={() => { setExplainOpen(true); setFiltersOpen(false); }}
+              onCat={setCat} onKind={toggleKind}
+              onDocs={() => setOnlyDocs((v) => !v)}
+              onVerified={() => setOnlyVerified((v) => !v)}
+              onContacts={() => setOnlyContacts((v) => !v)}
+              onReset={resetAll}
+            />
+          </aside>
+
+          <div className="results">
+            <div className="results__bar">
+              <button type="button" className="filters__toggle" onClick={() => setFiltersOpen(true)}>
+                Фильтры{activeFilters ? ` · ${activeFilters}` : ''}
+              </button>
+              <div className="results__count">
+                {loading ? 'Подбираем…' : `Найдено ${total}`}
+                {presetTitle ? <span className="results__preset">{presetTitle}</span> : null}
+              </div>
+            </div>
+
+            {!loading && !error && facets && total > 0 && (
+              <div className="summary">
+                С контактами <b>{facets.withContacts}</b>, с документами <b>{facets.withDocs}</b>,
+                данные подтверждены у <b>{facets.verified}</b>.
+                {counts.calling ? <> В работе: <b>{counts.calling}</b>.</> : null}
+                {counts.fit ? <> Подходят: <b>{counts.fit}</b>.</> : null}
+              </div>
+            )}
+
+            {indexing && !loading && (
+              <div className="notice">
+                Индекс наполняется: {status.citiesDone} из {status.citiesTotal} городов
+                {status.city ? `, сейчас ${status.city}` : ''}.
+              </div>
+            )}
+
+            {loading && (
+              <div className="grid">
+                {SKELETONS.map((i) => (
+                  <article className="card card--skel" key={i} style={{ animationDelay: `${i * 0.04}s` }}>
+                    <div className="skel skel--title" />
+                    <div className="skel skel--sub" />
+                    <div className="skel skel--tags" />
+                    <div className="skel skel--specs" />
+                    <div className="skel skel--bar" />
+                  </article>
+                ))}
+              </div>
+            )}
+
+            {!loading && error && (
+              <div className="empty">
+                <h3>Не получилось загрузить поставщиков</h3>
+                <p>{error}</p>
+                <button type="button" className="btn btn--cyan" onClick={() => load(1, false)}>Повторить</button>
+              </div>
+            )}
+
+            {!loading && !error && items.length > 0 && (
+              <>
+                <div className="grid">
+                  {items.map((s, i) => (
+                    <SupplierCard
+                      key={s.id} supplier={s} index={i % PER_PAGE}
+                      statuses={(meta && meta.statuses) || []}
+                      inCompare={compare.includes(s.id)}
+                      compareFull={compare.length >= MAX_COMPARE && !compare.includes(s.id)}
+                      onOpen={() => { setSelId(s.id); setMenu(null); }}
+                      onCompare={() => toggleCompare(s.id)}
+                      onStatus={(next) => changeStatus(s.id, next)}
+                    />
+                  ))}
+                </div>
+
+                <div className="more">
+                  <span className="more__count">Показано {items.length} из {total}</span>
+                  <a className="btn btn--ghost" href={exportUrl()} download>Выгрузить CSV</a>
+                  {page < pages && (
+                    <button
+                      type="button" className="btn btn--ghost"
+                      onClick={() => load(page + 1, true)} disabled={loadingMore}
+                    >
+                      {loadingMore ? 'Загружаем…' : 'Показать ещё'}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {!loading && !error && items.length === 0 && (
+              <div className="empty">
+                <h3>{indexing ? 'Индекс ещё наполняется' : 'Под эти условия поставщиков нет'}</h3>
+                <p>
+                  {indexing
+                    ? 'Города добавляются по очереди. Выберите город — он проиндексируется сразу.'
+                    : 'Снимите часть фильтров, добавьте тип «Розничная точка» или расширьте регион.'}
+                </p>
+                <button type="button" className="btn btn--cyan" onClick={resetAll}>Сбросить фильтры</button>
+              </div>
+            )}
+          </div>
         </div>
-
-        {!loading && !error && facets && total > 0 && (
-          <div className="summary">
-            В выборке <b>{total}</b>: с контактами <b>{facets.withContacts}</b>,
-            с документами <b>{facets.withDocs}</b>,
-            данные подтверждены у <b>{facets.verified}</b>.
-            {counts.calling ? <> В работе: <b>{counts.calling}</b>.</> : null}
-            {counts.fit ? <> Подходят: <b>{counts.fit}</b>.</> : null}
-          </div>
-        )}
-
-        {indexing && !loading && (
-          <div className="notice">
-            Индекс наполняется в фоне: {status.citiesDone} из {status.citiesTotal} городов
-            {status.city ? `, сейчас ${status.city}` : ''}. Выдача пополняется автоматически.
-          </div>
-        )}
-
-        {loading && (
-          <div className="grid">
-            {SKELETONS.map((i) => (
-              <article className="card card--skel" key={i} style={{ animationDelay: `${i * 0.04}s` }}>
-                <div className="skel skel--title" />
-                <div className="skel skel--sub" />
-                <div className="skel skel--tags" />
-                <div className="skel skel--specs" />
-                <div className="skel skel--bar" />
-              </article>
-            ))}
-          </div>
-        )}
-
-        {!loading && error && (
-          <div className="empty">
-            <h3>Не получилось загрузить поставщиков</h3>
-            <p>{error}</p>
-            <button type="button" className="btn btn--cyan" onClick={() => load(1, false)}>Повторить</button>
-          </div>
-        )}
-
-        {!loading && !error && items.length > 0 && (
-          <>
-            <div className="grid">
-              {items.map((s, i) => (
-                <SupplierCard
-                  key={s.id} supplier={s} index={i % PER_PAGE}
-                  statuses={(meta && meta.statuses) || []}
-                  inCompare={compare.includes(s.id)}
-                  compareFull={compare.length >= MAX_COMPARE && !compare.includes(s.id)}
-                  onOpen={() => { setSelId(s.id); setMenu(null); }}
-                  onCompare={() => toggleCompare(s.id)}
-                  onStatus={(next) => changeStatus(s.id, next)}
-                />
-              ))}
-            </div>
-
-            <div className="more">
-              <span className="more__count">Показано {items.length} из {total}</span>
-              <a className="btn btn--ghost" href={exportUrl()} download>Выгрузить CSV</a>
-              {page < pages && (
-                <button
-                  type="button" className="btn btn--ghost"
-                  onClick={() => load(page + 1, true)} disabled={loadingMore}
-                >
-                  {loadingMore ? 'Загружаем…' : 'Показать ещё'}
-                </button>
-              )}
-            </div>
-          </>
-        )}
-
-        {!loading && !error && items.length === 0 && (
-          <div className="empty">
-            <h3>{indexing ? 'Индекс ещё наполняется' : 'Под эти условия поставщиков нет'}</h3>
-            <p>
-              {indexing
-                ? 'Города добавляются по очереди. Выберите город — он проиндексируется сразу.'
-                : 'Снимите часть фильтров, добавьте тип «Розничная точка» или расширьте регион.'}
-            </p>
-            <button type="button" className="btn btn--cyan" onClick={resetAll}>Сбросить фильтры</button>
-          </div>
-        )}
       </section>
 
       <footer className="footer">

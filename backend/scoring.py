@@ -16,38 +16,86 @@ class Factor:
 
 
 FACTORS = (
+    Factor("reputation", "Репутация компании", "Что о компании говорят реестры и отзывы"),
     Factor("reach", "Связь", "Как быстро вы дозвонитесь и кому писать"),
     Factor("volume", "Опт и объёмы", "Работает ли с оптом и известны ли условия"),
-    Factor("docs", "Документы и юрлицо", "Пройдёт ли проверку службы качества"),
+    Factor("docs", "Документы", "Пройдёт ли проверку службы качества"),
     Factor("logistics", "Логистика", "Довезёт ли до вашего города"),
-    Factor("trust", "Достоверность", "Насколько данным можно верить"),
+    Factor("trust", "Достоверность данных", "Насколько полны и свежи сами данные"),
 )
 
 PRESETS = {
     "balanced": {
         "title": "Сбалансированно",
         "hint": "Ровный вес всех факторов",
-        "weights": {"reach": 25, "volume": 25, "docs": 20, "logistics": 15, "trust": 15},
+        "weights": {
+            "reputation": 20,
+            "reach": 20,
+            "volume": 20,
+            "docs": 15,
+            "logistics": 15,
+            "trust": 10,
+        },
+    },
+    "trusted": {
+        "title": "Проверенные компании",
+        "hint": "Вперёд выходят действующие юрлица с историей и отзывами",
+        "weights": {
+            "reputation": 45,
+            "reach": 10,
+            "volume": 5,
+            "docs": 20,
+            "logistics": 5,
+            "trust": 15,
+        },
     },
     "urgent": {
         "title": "Дозвониться сегодня",
         "hint": "Вперёд выходят те, у кого есть телефон и часы работы",
-        "weights": {"reach": 45, "volume": 15, "docs": 5, "logistics": 20, "trust": 15},
+        "weights": {
+            "reputation": 10,
+            "reach": 40,
+            "volume": 15,
+            "docs": 5,
+            "logistics": 20,
+            "trust": 10,
+        },
     },
     "docs": {
         "title": "Нужны документы",
         "hint": "Вперёд выходят с декларациями и реквизитами",
-        "weights": {"reach": 15, "volume": 15, "docs": 45, "logistics": 5, "trust": 20},
+        "weights": {
+            "reputation": 25,
+            "reach": 10,
+            "volume": 10,
+            "docs": 40,
+            "logistics": 5,
+            "trust": 10,
+        },
     },
     "volume": {
         "title": "Нужен опт",
         "hint": "Вперёд выходят производства и оптовые базы",
-        "weights": {"reach": 15, "volume": 45, "docs": 20, "logistics": 15, "trust": 5},
+        "weights": {
+            "reputation": 20,
+            "reach": 15,
+            "volume": 40,
+            "docs": 10,
+            "logistics": 10,
+            "trust": 5,
+        },
     },
     "near": {
         "title": "Ближе к городу",
         "hint": "Вперёд выходят те, кто рядом и возит сам",
-        "weights": {"reach": 25, "volume": 15, "docs": 10, "logistics": 45, "trust": 5},
+        "weights": {
+            "reputation": 15,
+            "reach": 20,
+            "volume": 10,
+            "docs": 5,
+            "logistics": 45,
+            "trust": 5,
+        },
     },
 }
 DEFAULT_PRESET = "balanced"
@@ -77,6 +125,7 @@ def with_age(row: dict) -> dict:
 
 def evaluate(supplier: dict) -> dict:
     return {
+        "reputation": _reputation(supplier),
         "reach": _reach(supplier),
         "volume": _volume(supplier),
         "docs": _docs(supplier),
@@ -111,6 +160,63 @@ def _box(points: int, plus: list, minus: list, ask: list) -> dict:
         "minus": minus,
         "ask": ask,
     }
+
+
+def _reputation(s: dict) -> dict:
+    points, plus, minus, ask = 0, [], [], []
+
+    status = s.get("legal_status") or ""
+    if s.get("legal_active"):
+        points += 30
+        plus.append(status.lower() if status else "действующее юрлицо по данным ФНС")
+    elif status:
+        minus.append(f"статус в ФНС: {status.lower()}")
+        ask.append("Проверить, действует ли юрлицо")
+    else:
+        minus.append("юрлицо не найдено в реестрах ФНС")
+        ask.append("Уточнить ИНН и проверить компанию в реестрах")
+
+    founded = s.get("founded")
+    if founded:
+        age = max(0, 2026 - int(founded))
+        if age >= 10:
+            points += 35
+        elif age >= 5:
+            points += 25
+        elif age >= 2:
+            points += 15
+        else:
+            points += 5
+        if age >= 2:
+            plus.append(f"на рынке {age} {_plural(age, 'год', 'года', 'лет')}")
+        else:
+            minus.append("компания зарегистрирована меньше двух лет назад")
+    else:
+        minus.append("дата регистрации неизвестна")
+
+    okved = s.get("okved") or ""
+    if okved:
+        points += 20
+        name = (s.get("okved_name") or "").strip()
+        plus.append(f"ОКВЭД {okved}: {name[:70]}" if name else f"ОКВЭД {okved}")
+    else:
+        minus.append("основной вид деятельности не подтверждён")
+
+    reviews = s.get("reviews")
+    rating = s.get("rating")
+    if reviews and rating:
+        plus.append(f"рейтинг {rating} по {reviews} отзывам")
+        if rating >= 4.5:
+            points += 15
+        elif rating >= 4:
+            points += 10
+        elif rating < 3.5:
+            minus.append(f"низкий рейтинг: {rating}")
+    else:
+        minus.append("отзывов в подключённых источниках нет")
+        ask.append("Посмотреть отзывы по ссылкам в карточке")
+
+    return _box(points, plus, minus, ask)
 
 
 def _reach(s: dict) -> dict:
@@ -222,16 +328,12 @@ def _docs(s: dict) -> dict:
         minus.append("нет ИНН и ОГРН")
         ask.append("Уточнить ИНН для проверки юрлица")
 
-    if s.get("egrul_name"):
-        points += 20
-        plus.append(f"юрлицо в ЕГРЮЛ: {s['egrul_name'][:60]}")
-        if not s.get("egrul_closed"):
-            points += 10
-        else:
-            minus.append("в ЕГРЮЛ есть запись о прекращении — проверить статус")
-            ask.append("Проверить действующий статус юрлица")
+    legal = s.get("legal_name") or s.get("egrul_name")
+    if legal:
+        points += 30
+        plus.append(f"юрлицо подтверждено: {legal[:60]}")
     else:
-        minus.append("юрлицо не сверено с ЕГРЮЛ")
+        minus.append("юрлицо не сверено с реестрами")
 
     return _box(points, plus, minus, ask)
 

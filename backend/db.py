@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     name_key TEXT NOT NULL,
     city TEXT NOT NULL,
     region TEXT NOT NULL,
+    area TEXT NOT NULL DEFAULT '',
     cats TEXT NOT NULL DEFAULT '',
     kind TEXT NOT NULL DEFAULT '',
     kind_tag TEXT NOT NULL DEFAULT '',
@@ -75,6 +76,13 @@ CREATE TABLE IF NOT EXISTS suppliers (
     egrul_registered TEXT NOT NULL DEFAULT '',
     egrul_closed INTEGER NOT NULL DEFAULT 0,
     egrul_checked REAL NOT NULL DEFAULT 0,
+    okved TEXT NOT NULL DEFAULT '',
+    okved_name TEXT NOT NULL DEFAULT '',
+    legal_name TEXT NOT NULL DEFAULT '',
+    legal_status TEXT NOT NULL DEFAULT '',
+    legal_active INTEGER NOT NULL DEFAULT 0,
+    score_reputation INTEGER NOT NULL DEFAULT 0,
+    fns_checked REAL NOT NULL DEFAULT 0,
     checked_at REAL NOT NULL DEFAULT 0,
     enriched_at REAL NOT NULL DEFAULT 0,
     enrich_tries INTEGER NOT NULL DEFAULT 0,
@@ -117,6 +125,9 @@ CREATE TABLE IF NOT EXISTS refreshes (
 );
 """
 
+NULLABLE_FIELDS = ("lat", "lon", "distance_km")
+NUMERIC_FIELDS = ("wholesale", "branches", "checked_at")
+
 JSON_FIELDS = ("phones", "emails", "certs", "plus", "minus", "sources", "socials")
 
 INDEXED_FIELDS = (
@@ -125,6 +136,7 @@ INDEXED_FIELDS = (
     "name_key",
     "city",
     "region",
+    "area",
     "cats",
     "kind",
     "kind_tag",
@@ -178,6 +190,11 @@ ENRICHED_FIELDS = (
     "egrul_registered",
     "egrul_closed",
     "egrul_checked",
+    "okved",
+    "okved_name",
+    "legal_name",
+    "legal_status",
+    "legal_active",
 )
 
 KIND_ORDER = (
@@ -191,6 +208,7 @@ SCORE_COLUMNS = (
     "score_docs",
     "score_logistics",
     "score_trust",
+    "score_reputation",
 )
 
 
@@ -220,6 +238,14 @@ _connection: sqlite3.Connection | None = None
 
 
 ADDED_COLUMNS = (
+    ("area", "TEXT NOT NULL DEFAULT ''"),
+    ("okved", "TEXT NOT NULL DEFAULT ''"),
+    ("okved_name", "TEXT NOT NULL DEFAULT ''"),
+    ("legal_name", "TEXT NOT NULL DEFAULT ''"),
+    ("legal_status", "TEXT NOT NULL DEFAULT ''"),
+    ("legal_active", "INTEGER NOT NULL DEFAULT 0"),
+    ("score_reputation", "INTEGER NOT NULL DEFAULT 0"),
+    ("fns_checked", "REAL NOT NULL DEFAULT 0"),
     ("socials", "TEXT NOT NULL DEFAULT '[]'"),
     ("kind_tag", "TEXT NOT NULL DEFAULT ''"),
     ("kind_class", "TEXT NOT NULL DEFAULT 'unknown'"),
@@ -289,8 +315,15 @@ def save_indexed(items: list[dict]) -> int:
         values = []
         for field in INDEXED_FIELDS:
             value = item.get(field)
-            if value is None and field in JSON_FIELDS:
-                value = []
+            if value is None:
+                if field in JSON_FIELDS:
+                    value = []
+                elif field in NULLABLE_FIELDS:
+                    value = None
+                elif field in NUMERIC_FIELDS:
+                    value = 0
+                else:
+                    value = ""
             values.append(_encode(value))
         rows.append((*values, now, now))
     with _lock:
@@ -466,7 +499,7 @@ def save_scores(supplier_id: str, scores: dict) -> None:
         connection = connect()
         connection.execute(
             "UPDATE suppliers SET score_reach=?, score_volume=?, score_docs=?, "
-            "score_logistics=?, score_trust=?, score=?, scored_at=?, "
+            "score_logistics=?, score_trust=?, score_reputation=?, score=?, scored_at=?, "
             "rating=CASE WHEN reviews IS NULL THEN ? ELSE rating END WHERE id=?",
             (
                 scores["reach"],
@@ -474,6 +507,7 @@ def save_scores(supplier_id: str, scores: dict) -> None:
                 scores["docs"],
                 scores["logistics"],
                 scores["trust"],
+                scores["reputation"],
                 scores["total"],
                 time.time(),
                 round(scores["total"] / 20, 1),
@@ -526,6 +560,60 @@ def status_counts(user_id: str) -> dict:
         (user_id,),
     ).fetchall()
     return {row["status"]: row["n"] for row in rows}
+
+
+def pending_fns(limit: int) -> list[dict]:
+    connection = connect()
+    rows = connection.execute(
+        "SELECT * FROM suppliers WHERE fns_checked = 0 AND kind_class != 'retail' "
+        "ORDER BY " + KIND_ORDER + ", score DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [row_to_dict(row) for row in rows]
+
+
+def mark_fns_checked(supplier_id: str) -> None:
+    with _lock:
+        connection = connect()
+        connection.execute(
+            "UPDATE suppliers SET fns_checked=? WHERE id=?", (time.time(), supplier_id)
+        )
+        connection.commit()
+
+
+def save_kind(supplier_id: str, kind_class: str, cats: str) -> None:
+    with _lock:
+        connection = connect()
+        if cats:
+            connection.execute(
+                "UPDATE suppliers SET kind_class=?, cats=?, wholesale=? WHERE id=?",
+                (
+                    kind_class,
+                    cats,
+                    1 if kind_class in ("producer", "wholesale") else 0,
+                    supplier_id,
+                ),
+            )
+        else:
+            connection.execute(
+                "UPDATE suppliers SET kind_class=?, wholesale=? WHERE id=?",
+                (kind_class, 1 if kind_class in ("producer", "wholesale") else 0, supplier_id),
+            )
+        connection.commit()
+
+
+def find_by_key(name_key: str) -> dict | None:
+    connection = connect()
+    row = connection.execute(
+        "SELECT * FROM suppliers WHERE name_key=? ORDER BY score DESC LIMIT 1", (name_key,)
+    ).fetchone()
+    return row_to_dict(row) if row else None
+
+
+def find_by_inn(inn: str) -> dict | None:
+    connection = connect()
+    row = connection.execute("SELECT * FROM suppliers WHERE inn=? LIMIT 1", (inn,)).fetchone()
+    return row_to_dict(row) if row else None
 
 
 def pending_egrul(limit: int) -> list[dict]:
