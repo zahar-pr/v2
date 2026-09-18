@@ -6,6 +6,7 @@ from catalog import City
 from domain import (
     PlaceNotFound,
     SourceUnavailable,
+    classify,
     haystack,
     is_food_related,
     looks_food,
@@ -43,6 +44,9 @@ class OsmSource(SupplierSource):
         found = [_to_record(element, city, self.title) for element in elements]
         return [item for item in found if item]
 
+    async def center(self, session, place: str) -> tuple[float, float]:
+        return await self._center(session, place)
+
     async def _center(self, session, place: str) -> tuple[float, float]:
         if place in _centers:
             return _centers[place]
@@ -57,13 +61,13 @@ class OsmSource(SupplierSource):
     async def _overpass(self, session, query: str) -> list[dict]:
         tasks = [asyncio.create_task(self._ask(session, url, query)) for url in OVERPASS_MIRRORS]
         try:
-            error = SourceUnavailable("зеркала Overpass не ответили")
+            reasons: list[str] = []
             for finished in asyncio.as_completed(tasks):
                 try:
                     return await finished
                 except Exception as failure:
-                    error = failure
-            raise error
+                    reasons.append(str(failure) or type(failure).__name__)
+            raise SourceUnavailable("зеркала Overpass: " + ", ".join(reasons[:3]))
         finally:
             for task in tasks:
                 task.cancel()
@@ -89,6 +93,27 @@ def _query(city: City, center: tuple[float, float]) -> str:
     )
     tags = "".join(f'nwr["{key}"="{value}"]{scope};' for key, value in catalog.ALL_TAGS)
     return f"[out:json][timeout:{QUERY_TIMEOUT}];({tags});out center tags {RESULT_LIMIT};"
+
+
+SOCIAL_TAGS = (
+    ("contact:vk", "ВКонтакте", "https://vk.com/"),
+    ("contact:telegram", "Telegram", "https://t.me/"),
+    ("contact:whatsapp", "WhatsApp", "https://wa.me/"),
+    ("contact:instagram", "Instagram", "https://instagram.com/"),
+    ("contact:facebook", "Facebook", "https://facebook.com/"),
+    ("contact:ok", "Одноклассники", "https://ok.ru/"),
+)
+
+
+def _socials(tags: dict) -> list[dict]:
+    found = []
+    for key, title, prefix in SOCIAL_TAGS:
+        value = (tags.get(key) or "").strip()
+        if not value:
+            continue
+        url = value if value.startswith("http") else prefix + value.lstrip("@/")
+        found.append({"title": title, "url": url})
+    return found[:4]
 
 
 def _tag(tags: dict, *names: str) -> str:
@@ -137,7 +162,18 @@ def _to_record(element: dict, city: City, source_title: str) -> dict | None:
     website = _tag(tags, "website", "contact:website", "url")
     if website and not website.startswith("http"):
         website = "https://" + website
-    kind_tag = _tag(tags, "shop", "craft", "industrial", "man_made", "office", "wholesale")
+    kind_key = next(
+        (
+            key
+            for key in ("craft", "industrial", "man_made", "shop", "wholesale", "office")
+            if tags.get(key)
+        ),
+        "",
+    )
+    kind_tag = tags.get(kind_key, "")
+    kind_pair = f"{kind_key}={kind_tag}" if kind_key else ""
+    kind_class = classify(kind_pair, name)
+    socials = _socials(tags)
     osm_id = f"{element['type']}/{element['id']}"
     address = ", ".join(
         part
@@ -158,16 +194,15 @@ def _to_record(element: dict, city: City, source_title: str) -> dict | None:
         "cats": "," + ",".join(cats) + ",",
         "cats_titles": [catalog.title(item) for item in cats],
         "kind": catalog.KIND_TITLES.get(kind_tag, kind_tag or catalog.UNKNOWN_KIND),
+        "kind_tag": kind_pair,
+        "kind_class": kind_class,
         "address": address,
         "phones": _many(tags, "phone", "contact:phone", "contact:mobile"),
         "emails": _many(tags, "email", "contact:email"),
+        "socials": socials,
         "website": website,
         "hours": _tag(tags, "opening_hours"),
-        "wholesale": bool(
-            _tag(tags, "wholesale", "craft", "industrial")
-            or tags.get("shop") == "wholesale"
-            or looks_wholesale(name)
-        ),
+        "wholesale": kind_class in ("producer", "wholesale"),
         "branches": 1,
         "lat": element.get("lat") or center.get("lat"),
         "lon": element.get("lon") or center.get("lon"),

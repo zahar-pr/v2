@@ -5,14 +5,18 @@ import aiohttp
 import catalog
 import db
 import domain
-from sources import active, website, wikidata
+import scoring
+from sources import active, egrul, website, wikidata
 
-USER_AGENT = "ProviziaBot/1.0 (+https://github.com/zahar-pr/goulash-find)"
+USER_AGENT = "ProviziaBot/1.0 (+https://github.com/zahar-pr/v2)"
 REFRESH_TTL = 7 * 24 * 3600
+RETRY_TTL = 600
 PREWARM_PAUSE = 2.0
 ENRICH_BATCH = 12
 ENRICH_PARALLEL = 6
 ENRICH_PAUSE = 4.0
+EGRUL_BATCH = 8
+EGRUL_PAUSE = 6.0
 
 state = {
     "indexing": False,
@@ -21,6 +25,7 @@ state = {
     "cities_total": len(catalog.CITIES),
     "enriching": False,
     "enriched": 0,
+    "egrul": 0,
     "errors": [],
 }
 _locks: dict[str, asyncio.Lock] = {}
@@ -34,7 +39,13 @@ def session() -> aiohttp.ClientSession:
 
 
 def is_fresh(city: str) -> bool:
-    return time.time() - db.refreshed_at(city) < REFRESH_TTL
+    row = db.refresh_row(city)
+    if row is None:
+        return False
+    waited = time.time() - row["refreshed_at"]
+    if row["found"] > 0:
+        return waited < REFRESH_TTL
+    return waited < RETRY_TTL
 
 
 async def ensure_city(city_name: str) -> int:
@@ -70,13 +81,31 @@ async def refresh_city(city: catalog.City, shared=None) -> int:
 
             merged = merge(records)
             db.save_indexed(merged)
-            _rate(merged)
+            await _place_city(client, city)
+            rescore(merged)
             db.mark_refreshed(city.name, len(merged), "; ".join(failures))
             return len(merged)
         finally:
             if own:
                 await client.close()
             state["city"] = ""
+
+
+async def _place_city(client, city: catalog.City) -> None:
+    center = db.center_of(city.name)
+    if center is None:
+        for source in active():
+            finder = getattr(source, "center", None)
+            if finder is None:
+                continue
+            try:
+                center = await finder(client, city.name)
+                break
+            except Exception:
+                center = None
+    if center:
+        db.save_center(city.name, center[0], center[1])
+        db.save_distances(city.name, center)
 
 
 def merge(records: list[dict]) -> list[dict]:
@@ -118,18 +147,20 @@ def _longest(first: str, second: str) -> str:
     return first if len(first) >= len(second) else second
 
 
-def _rate(records: list[dict]) -> None:
+def score_one(row: dict) -> dict:
+    factors = scoring.evaluate(scoring.with_age(row))
+    weights = scoring.weights_of(scoring.DEFAULT_PRESET)
+    scores = {factor.id: factors[factor.id]["score"] for factor in scoring.FACTORS}
+    scores["total"] = scoring.total(factors, weights)
+    db.save_scores(row["id"], scores)
+    return scores
+
+
+def rescore(records: list[dict]) -> None:
     for record in records:
-        saved = db.get(record["id"]) or record
-        rating = domain.rate(saved)
-        db.save_rating(
-            record["id"],
-            rating["score"],
-            rating["level"],
-            rating["verdict"],
-            rating["plus"],
-            rating["minus"],
-        )
+        saved = db.get(record["id"])
+        if saved:
+            score_one(saved)
 
 
 async def prewarm() -> None:
@@ -137,6 +168,7 @@ async def prewarm() -> None:
     state["cities_done"] = sum(1 for city in catalog.CITIES if is_fresh(city.name))
     try:
         async with session() as client:
+            await backfill(client)
             for city in catalog.CITIES:
                 if is_fresh(city.name):
                     continue
@@ -149,6 +181,20 @@ async def prewarm() -> None:
     finally:
         state["indexing"] = False
         state["city"] = ""
+
+
+async def backfill(client) -> None:
+    for city in catalog.CITIES:
+        if db.center_of(city.name) is None and db.refreshed_at(city.name):
+            await _place_city(client, city)
+
+    while True:
+        pending = db.unscored(400)
+        if not pending:
+            return
+        for row in pending:
+            score_one(row)
+        await asyncio.sleep(0)
 
 
 async def enrich_forever() -> None:
@@ -194,16 +240,41 @@ async def enrich_one(client, supplier: dict) -> None:
         db.set_verified(supplier["id"], True, "контакты подтверждены на сайте поставщика")
     fresh = db.get(supplier["id"])
     if fresh:
-        rating = domain.rate(fresh)
-        db.save_rating(
-            supplier["id"],
-            rating["score"],
-            rating["level"],
-            rating["verdict"],
-            rating["plus"],
-            rating["minus"],
-        )
+        score_one(fresh)
     state["enriched"] += 1
+
+
+async def egrul_forever() -> None:
+    try:
+        async with session() as client:
+            while True:
+                pending = db.pending_egrul(EGRUL_BATCH)
+                if not pending:
+                    await asyncio.sleep(120)
+                    continue
+                for supplier in pending:
+                    await egrul_one(client, supplier)
+                    await asyncio.sleep(EGRUL_PAUSE)
+    except asyncio.CancelledError:
+        raise
+
+
+async def egrul_one(client, supplier: dict) -> None:
+    city = catalog.city(supplier["city"])
+    try:
+        found = await egrul.lookup(client, supplier, city.code if city else "")
+    except Exception:
+        found = None
+
+    db.mark_egrul_checked(supplier["id"])
+    if not found:
+        return
+
+    db.save_enrichment(supplier["id"], found)
+    fresh = db.get(supplier["id"])
+    if fresh:
+        score_one(fresh)
+    state["egrul"] += 1
 
 
 def _chunks(items: list, size: int):

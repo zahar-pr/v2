@@ -18,6 +18,30 @@ FOOD_WORDS = re.compile(
     r"майонез|кетчуп|сахар|соль|снек|чипс",
     re.I,
 )
+PRODUCER_TAGS = {"craft", "industrial", "man_made"}
+PRODUCER_WORDS = re.compile(
+    r"завод|комбинат|фабрик|производ|мельниц|сыроварн|пивоварн|винодель|коптильн|"
+    r"агрофирм|агрокомплекс|птицефабрик|молзавод|мясокомбинат|хлебозавод|цех\b",
+    re.I,
+)
+WHOLESALE_TAGS = {
+    ("shop", "wholesale"),
+    ("shop", "trade"),
+    ("wholesale", "food"),
+    ("wholesale", "supermarket"),
+    ("shop", "food"),
+}
+WHOLESALE_WORDS_STRICT = re.compile(
+    r"опт|база\b|склад|торговый дом|дистрибьют|cash|metro|selgros|поставщик|снабжен",
+    re.I,
+)
+TYPES = {
+    "producer": "Производство",
+    "wholesale": "Оптовая база",
+    "retail": "Розничная точка",
+    "unknown": "Не определён",
+}
+
 CRITERIA = (
     (25, lambda s: bool(s.get("phones")), "есть телефон", "нет телефона"),
     (15, lambda s: bool(s.get("website")), "есть сайт", "нет сайта"),
@@ -57,6 +81,29 @@ def looks_food(text: str) -> bool:
 
 def name_key(name: str) -> str:
     return re.sub(r"[^a-zа-я0-9]", "", name.lower())
+
+
+def classify(kind_tag: str, name: str) -> str:
+    key, _, value = kind_tag.partition("=")
+    if not kind_tag:
+        return (
+            "producer"
+            if PRODUCER_WORDS.search(name)
+            else ("wholesale" if WHOLESALE_WORDS_STRICT.search(name) else "unknown")
+        )
+    if PRODUCER_WORDS.search(name):
+        return "producer"
+    if key in PRODUCER_TAGS:
+        return "producer"
+    if WHOLESALE_WORDS_STRICT.search(name) or (key, value) in WHOLESALE_TAGS:
+        return "wholesale"
+    if key == "shop":
+        return "retail"
+    return "unknown"
+
+
+def type_title(kind_class: str) -> str:
+    return TYPES.get(kind_class, TYPES["unknown"])
 
 
 def rate(supplier: dict) -> dict:

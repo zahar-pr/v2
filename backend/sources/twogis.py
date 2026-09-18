@@ -84,6 +84,7 @@ def _to_record(item: dict, city: City, category_id: str, source_title: str) -> d
         "address": item.get("address_name") or city.name,
         "phones": contacts["phones"],
         "emails": contacts["emails"],
+        "socials": [],
         "website": contacts["website"],
         "hours": _hours(item),
         "wholesale": looks_wholesale(name) or "опт" in (item.get("address_name") or "").lower(),

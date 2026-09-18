@@ -1,22 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Logo from './components/Logo.jsx';
 import Dropdown from './components/Dropdown.jsx';
+import PriorityBar from './components/PriorityBar.jsx';
 import SupplierCard from './components/SupplierCard.jsx';
 import SupplierPanel from './components/SupplierPanel.jsx';
 import CompareModal from './components/CompareModal.jsx';
+import CallList from './components/CallList.jsx';
+import ScoreExplainer from './components/ScoreExplainer.jsx';
 import useNarrow from './hooks/useNarrow.js';
 import useDebounced from './hooks/useDebounced.js';
-import { getMeta, getNotes, getStatus, getSuppliers, saveNote } from './api/client.js';
-import { plural } from './data/suppliers.js';
+import {
+  getCallList, getMeta, getNotes, getStatus, getSuppliers, saveNote, setStatus,
+} from './api/client.js';
+import { plural, weightsToString } from './data/suppliers.js';
 
 const MAX_COMPARE = 3;
 const SKELETONS = [0, 1, 2, 3, 4, 5];
 const PER_PAGE = 12;
 
 const STEPS = [
-  { n: 1, color: '#00E1E1', title: 'Фильтр по категории и региону', text: 'Поиск идёт по индексу: категория, регион, город, документы, опт и производство.' },
-  { n: 2, color: '#2BE2A0', title: 'Единая карточка данных', text: 'Контакты, реквизиты, документы, минимальный заказ и ссылки на все источники.' },
-  { n: 3, color: '#FFFFFF', title: 'Сравнение и решение', text: 'До трёх компаний рядом, оценка готовности к контакту и заметки по переговорам.' },
+  { n: 1, color: '#00E1E1', title: 'Отобрать нужных', text: 'Производства и оптовые базы отдельно от розницы, по категории, региону и городу.' },
+  { n: 2, color: '#2BE2A0', title: 'Понять, кому звонить', text: 'Приоритет звонка складывается из пяти факторов, и видно, из каких именно.' },
+  { n: 3, color: '#FFFFFF', title: 'Довести до решения', text: 'Список обзвона, вопросы к каждому поставщику, статусы и заметки по переговорам.' },
 ];
 
 export default function App() {
@@ -26,9 +31,13 @@ export default function App() {
   const [region, setRegion] = useState('');
   const [city, setCity] = useState('');
   const [sort, setSort] = useState('');
+  const [preset, setPreset] = useState('balanced');
+  const [weights, setWeights] = useState({});
+  const [kinds, setKinds] = useState([]);
   const [onlyDocs, setOnlyDocs] = useState(false);
   const [onlyVerified, setOnlyVerified] = useState(false);
-  const [onlyWholesale, setOnlyWholesale] = useState(false);
+  const [onlyContacts, setOnlyContacts] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('');
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -38,18 +47,23 @@ export default function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [stats, setStats] = useState(null);
-  const [status, setStatus] = useState(null);
+  const [status, setStatusState] = useState(null);
+  const [counts, setCounts] = useState({});
+  const [facets, setFacets] = useState(null);
 
   const [menu, setMenu] = useState(null);
   const [selId, setSelId] = useState(null);
   const [compare, setCompare] = useState([]);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [callsOpen, setCallsOpen] = useState(false);
+  const [calls, setCalls] = useState([]);
+  const [callsLoading, setCallsLoading] = useState(false);
+  const [explainOpen, setExplainOpen] = useState(false);
   const [notes, setNotes] = useState({});
 
   const narrow = useNarrow();
   const settledQuery = useDebounced(query, 350);
   const timers = useRef({});
-  const ready = Boolean(meta);
 
   useEffect(() => {
     let alive = true;
@@ -61,8 +75,12 @@ export default function App() {
         setRegion(answer.defaults.region);
         setCity(answer.defaults.city);
         setSort(answer.defaults.sort);
+        setPreset(answer.defaults.preset);
+        setKinds(answer.defaults.kinds);
+        const found = answer.presets.find((p) => p.id === answer.defaults.preset);
+        setWeights(found ? found.weights : {});
         setStats(answer.stats);
-        setStatus(answer.status);
+        setStatusState(answer.status);
       })
       .catch((e) => {
         if (!alive) return;
@@ -82,6 +100,22 @@ export default function App() {
     return () => { alive = false; };
   }, []);
 
+  const filters = useMemo(() => ({
+    q: settledQuery.trim(),
+    category: cat,
+    region,
+    city,
+    kinds: kinds.join(','),
+    onlyDocs,
+    onlyVerified,
+    onlyContacts,
+    status: statusFilter,
+    preset,
+    weights: weightsToString(weights),
+    sort,
+  }), [settledQuery, cat, region, city, kinds, onlyDocs, onlyVerified, onlyContacts,
+    statusFilter, preset, weights, sort]);
+
   const load = useCallback(
     (nextPage, append) => {
       if (!meta) return undefined;
@@ -91,18 +125,7 @@ export default function App() {
       else setLoading(true);
       setError('');
 
-      getSuppliers({
-        q: settledQuery.trim(),
-        category: cat,
-        region,
-        city,
-        sort,
-        onlyDocs,
-        onlyVerified,
-        onlyWholesale,
-        page: nextPage,
-        perPage: PER_PAGE,
-      })
+      getSuppliers({ ...filters, page: nextPage, perPage: PER_PAGE })
         .then((answer) => {
           if (!alive) return;
           setItems((prev) => (append ? [...prev, ...answer.items] : answer.items));
@@ -110,7 +133,9 @@ export default function App() {
           setPages(answer.pages);
           setPage(answer.page);
           setStats(answer.stats);
-          setStatus(answer.status);
+          setStatusState(answer.status);
+          setCounts(answer.pipeline || {});
+          setFacets(answer.facets || null);
           setLoading(false);
           setLoadingMore(false);
         })
@@ -124,7 +149,7 @@ export default function App() {
 
       return () => { alive = false; };
     },
-    [meta, settledQuery, cat, region, city, sort, onlyDocs, onlyVerified, onlyWholesale]
+    [meta, filters]
   );
 
   useEffect(() => {
@@ -138,7 +163,7 @@ export default function App() {
       getStatus()
         .then((answer) => {
           setStats(answer.stats);
-          setStatus(answer.status);
+          setStatusState(answer.status);
           if (!answer.status.indexing) load(1, false);
         })
         .catch(() => {});
@@ -146,22 +171,49 @@ export default function App() {
     return () => clearInterval(timer);
   }, [status, load]);
 
+  const exportUrl = () => {
+    const search = new URLSearchParams();
+    Object.entries({ ...filters, limit: 300 }).forEach(([key, value]) => {
+      if (value !== '' && value !== undefined && value !== null && value !== false) {
+        search.set(key, String(value));
+      }
+    });
+    return '/api/export.csv?' + search;
+  };
+
+  const openCalls = () => {
+    setCallsOpen(true);
+    setCallsLoading(true);
+    setMenu(null);
+    getCallList({ ...filters, limit: 20 })
+      .then((answer) => { setCalls(answer.items); setCallsLoading(false); })
+      .catch(() => { setCalls([]); setCallsLoading(false); });
+  };
+
   const cities = useMemo(() => {
     if (!meta) return [];
     const list = meta.cities[region] || meta.cities[meta.labels.anyRegion] || [];
     return [meta.labels.anyCity, ...list];
   }, [meta, region]);
 
-  const selected = items.find((s) => s.id === selId) || null;
-  const compareItems = compare.map((id) => items.find((s) => s.id === id)).filter(Boolean);
-  const anyFilter = Boolean(query) || onlyDocs || onlyVerified || onlyWholesale
+  const selected = items.find((s) => s.id === selId)
+    || calls.find((s) => s.id === selId) || null;
+  const compareItems = compare
+    .map((id) => items.find((s) => s.id === id) || calls.find((s) => s.id === id))
+    .filter(Boolean);
+  const anyFilter = Boolean(query) || onlyDocs || onlyVerified || onlyContacts || statusFilter
     || (meta && (cat !== meta.defaults.category || region !== meta.defaults.region
-      || city !== meta.defaults.city || sort !== meta.defaults.sort));
+      || city !== meta.defaults.city || sort !== meta.defaults.sort
+      || kinds.join(',') !== meta.defaults.kinds.join(',')));
 
   const toggleCompare = (id) => setCompare((prev) => (
     prev.includes(id)
       ? prev.filter((x) => x !== id)
       : prev.length >= MAX_COMPARE ? prev : [...prev, id]
+  ));
+
+  const toggleKind = (id) => setKinds((prev) => (
+    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
   ));
 
   const resetAll = () => {
@@ -171,12 +223,25 @@ export default function App() {
     setRegion(meta.defaults.region);
     setCity(meta.defaults.city);
     setSort(meta.defaults.sort);
-    setOnlyDocs(false); setOnlyVerified(false); setOnlyWholesale(false);
+    setKinds(meta.defaults.kinds);
+    setOnlyDocs(false); setOnlyVerified(false); setOnlyContacts(false);
+    setStatusFilter('');
   };
 
   const changeRegion = (value) => {
     setRegion(value);
     if (meta) setCity(meta.defaults.city);
+  };
+
+  const changePreset = (id) => {
+    setPreset(id);
+    const found = meta.presets.find((p) => p.id === id);
+    if (found) setWeights(found.weights);
+  };
+
+  const changeWeights = (next) => {
+    setWeights(next);
+    setPreset('custom');
   };
 
   const changeNote = (supplierId, text) => {
@@ -187,14 +252,21 @@ export default function App() {
     }, 600);
   };
 
+  const changeStatus = (supplierId, next) => {
+    const apply = (list) => list.map((s) => (s.id === supplierId ? { ...s, status: next } : s));
+    setItems(apply);
+    setCalls(apply);
+    setStatus(supplierId, next)
+      .then((answer) => setCounts(answer.counts || {}))
+      .catch(() => {});
+  };
+
   const indexing = Boolean(status && status.indexing);
   const badge = () => {
-    if (loading) return 'Ищем поставщиков';
-    if (indexing) {
-      return `Индекс наполняется: ${status.citiesDone} из ${status.citiesTotal} городов`;
-    }
-    const n = (stats && stats.total) || 0;
-    return `${n} ${plural(n, 'поставщик', 'поставщика', 'поставщиков')} в индексе`;
+    if (loading) return 'Подбираем поставщиков';
+    if (indexing) return `Индекс наполняется: ${status.citiesDone} из ${status.citiesTotal} городов`;
+    if (!stats) return '';
+    return `${stats.producers} производств и ${stats.wholesale} оптовых баз в ${stats.citiesIndexed} городах`;
   };
 
   return (
@@ -206,6 +278,10 @@ export default function App() {
             <span className="brand__name">Провизия</span>
           </div>
           <div className="header__found">Найдено: <b>{loading ? '…' : total}</b></div>
+          <button type="button" className="btn-compare" onClick={openCalls}>
+            Обзвон
+            <span className="btn-compare__count">{counts.calling || 0}</span>
+          </button>
           <button
             type="button"
             className={`btn-compare${compare.length ? ' btn-compare--on' : ''}`}
@@ -223,7 +299,7 @@ export default function App() {
             <i />
             <span style={{ whiteSpace: 'nowrap' }}>{badge()}</span>
           </div>
-          <h1>Поставщики продуктов, ингредиентов и упаковки в одном каталоге</h1>
+          <h1>Кому из поставщиков звонить первым</h1>
 
           <div className="steps">
             {STEPS.map((s, i) => (
@@ -256,27 +332,18 @@ export default function App() {
               </div>
 
               <Dropdown
-                label="Регион"
-                value={region || '—'}
-                options={(meta && meta.regions) || []}
-                open={menu === 'region'}
-                onToggle={(v) => setMenu(v ? 'region' : null)}
+                label="Регион" value={region || '—'} options={(meta && meta.regions) || []}
+                open={menu === 'region'} onToggle={(v) => setMenu(v ? 'region' : null)}
                 onSelect={changeRegion}
               />
               <Dropdown
-                label="Город"
-                value={city || '—'}
-                options={cities}
-                open={menu === 'city'}
-                onToggle={(v) => setMenu(v ? 'city' : null)}
+                label="Город" value={city || '—'} options={cities}
+                open={menu === 'city'} onToggle={(v) => setMenu(v ? 'city' : null)}
                 onSelect={setCity}
               />
               <Dropdown
-                label="Сортировка"
-                value={sort || '—'}
-                options={(meta && meta.sorts) || []}
-                open={menu === 'sort'}
-                onToggle={(v) => setMenu(v ? 'sort' : null)}
+                label="Сортировка" value={sort || '—'} options={(meta && meta.sorts) || []}
+                open={menu === 'sort'} onToggle={(v) => setMenu(v ? 'sort' : null)}
                 onSelect={setSort}
               />
             </div>
@@ -284,8 +351,7 @@ export default function App() {
             <div className="chips">
               {((meta && meta.categories) || []).map((c) => (
                 <button
-                  type="button"
-                  key={c.id}
+                  type="button" key={c.id}
                   className={`chip${cat === c.id ? ' chip--on' : ''}`}
                   onClick={() => setCat(c.id)}
                 >
@@ -298,23 +364,52 @@ export default function App() {
       </div>
 
       <section className="wrap catalog">
+        {meta && (
+          <PriorityBar
+            presets={meta.presets} factors={meta.factors} preset={preset} weights={weights}
+            onPreset={changePreset} onWeights={changeWeights}
+            onExplain={() => setExplainOpen(true)}
+          />
+        )}
+
         <div className="filterbar">
+          <span className="filterbar__label">Тип</span>
+          {((meta && meta.kinds) || []).map((k) => (
+            <button
+              type="button" key={k.id}
+              className={`pill${kinds.includes(k.id) ? ' pill--on' : ''}`}
+              onClick={() => toggleKind(k.id)}
+            >
+              {k.title}
+              {facets && <span className="pill__count">{facets.types[k.id] || 0}</span>}
+            </button>
+          ))}
+          <label>
+            <input type="checkbox" checked={onlyContacts} onChange={() => setOnlyContacts((v) => !v)} />
+            Есть контакты
+          </label>
           <label>
             <input type="checkbox" checked={onlyDocs} onChange={() => setOnlyDocs((v) => !v)} />
-            Только с документами
+            С документами
           </label>
           <label>
             <input type="checkbox" checked={onlyVerified} onChange={() => setOnlyVerified((v) => !v)} />
-            Данные подтверждены
-          </label>
-          <label>
-            <input type="checkbox" checked={onlyWholesale} onChange={() => setOnlyWholesale((v) => !v)} />
-            Опт и производство
+            Подтверждённые
           </label>
           {anyFilter && (
-            <button type="button" className="filterbar__reset" onClick={resetAll}>Сбросить все фильтры</button>
+            <button type="button" className="filterbar__reset" onClick={resetAll}>Сбросить фильтры</button>
           )}
         </div>
+
+        {!loading && !error && facets && total > 0 && (
+          <div className="summary">
+            В выборке <b>{total}</b>: с контактами <b>{facets.withContacts}</b>,
+            с документами <b>{facets.withDocs}</b>,
+            данные подтверждены у <b>{facets.verified}</b>.
+            {counts.calling ? <> В работе: <b>{counts.calling}</b>.</> : null}
+            {counts.fit ? <> Подходят: <b>{counts.fit}</b>.</> : null}
+          </div>
+        )}
 
         {indexing && !loading && (
           <div className="notice">
@@ -350,25 +445,24 @@ export default function App() {
             <div className="grid">
               {items.map((s, i) => (
                 <SupplierCard
-                  key={s.id}
-                  supplier={s}
-                  index={i % PER_PAGE}
+                  key={s.id} supplier={s} index={i % PER_PAGE}
+                  statuses={(meta && meta.statuses) || []}
                   inCompare={compare.includes(s.id)}
                   compareFull={compare.length >= MAX_COMPARE && !compare.includes(s.id)}
                   onOpen={() => { setSelId(s.id); setMenu(null); }}
                   onCompare={() => toggleCompare(s.id)}
+                  onStatus={(next) => changeStatus(s.id, next)}
                 />
               ))}
             </div>
 
             <div className="more">
               <span className="more__count">Показано {items.length} из {total}</span>
+              <a className="btn btn--ghost" href={exportUrl()} download>Выгрузить CSV</a>
               {page < pages && (
                 <button
-                  type="button"
-                  className="btn btn--ghost"
-                  onClick={() => load(page + 1, true)}
-                  disabled={loadingMore}
+                  type="button" className="btn btn--ghost"
+                  onClick={() => load(page + 1, true)} disabled={loadingMore}
                 >
                   {loadingMore ? 'Загружаем…' : 'Показать ещё'}
                 </button>
@@ -379,11 +473,11 @@ export default function App() {
 
         {!loading && !error && items.length === 0 && (
           <div className="empty">
-            <h3>{indexing ? 'Индекс ещё наполняется' : 'Под эти фильтры поставщиков нет'}</h3>
+            <h3>{indexing ? 'Индекс ещё наполняется' : 'Под эти условия поставщиков нет'}</h3>
             <p>
               {indexing
-                ? 'Города добавляются по очереди, это занимает несколько минут. Выберите город — он проиндексируется сразу.'
-                : 'Снимите часть условий, очистите строку поиска или выберите другой регион.'}
+                ? 'Города добавляются по очереди. Выберите город — он проиндексируется сразу.'
+                : 'Снимите часть фильтров, добавьте тип «Розничная точка» или расширьте регион.'}
             </p>
             <button type="button" className="btn btn--cyan" onClick={resetAll}>Сбросить фильтры</button>
           </div>
@@ -402,8 +496,10 @@ export default function App() {
       {selected && (
         <SupplierPanel
           supplier={selected}
+          statuses={(meta && meta.statuses) || []}
           note={notes[selected.id] !== undefined ? notes[selected.id] : selected.note}
           onNote={(v) => changeNote(selected.id, v)}
+          onStatus={(next) => changeStatus(selected.id, next)}
           inCompare={compare.includes(selected.id)}
           compareFull={compare.length >= MAX_COMPARE && !compare.includes(selected.id)}
           onCompare={() => toggleCompare(selected.id)}
@@ -413,11 +509,24 @@ export default function App() {
 
       {compareOpen && (
         <CompareModal
-          items={compareItems}
-          notes={notes}
-          narrow={narrow}
-          onClear={() => setCompare([])}
-          onClose={() => setCompareOpen(false)}
+          items={compareItems} notes={notes} narrow={narrow}
+          preset={preset} weights={weights}
+          onClear={() => setCompare([])} onClose={() => setCompareOpen(false)}
+        />
+      )}
+
+      {callsOpen && (
+        <CallList
+          items={calls} statuses={(meta && meta.statuses) || []} loading={callsLoading}
+          onStatus={changeStatus}
+          onOpen={(id) => { setSelId(id); setCallsOpen(false); }}
+          onClose={() => setCallsOpen(false)}
+        />
+      )}
+
+      {explainOpen && meta && (
+        <ScoreExplainer
+          factors={meta.factors} presets={meta.presets} onClose={() => setExplainOpen(false)}
         />
       )}
     </>

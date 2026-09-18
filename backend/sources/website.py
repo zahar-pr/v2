@@ -102,6 +102,16 @@ DELIVERY_LINE = re.compile(
     re.I,
 )
 DELIVERY_FAST = re.compile(r"в\s+день\s+заказа|на\s+следующий\s+день|1[–—-]2\s+дн|ежедневн", re.I)
+NAV_WORDS = re.compile(
+    r"франшиз|вакансі|ваканс|контакты|главная|о\s+компании|каталог|новости|корзина|"
+    r"личный кабинет|войти|регистрац|меню|блог|отзывы|акции|войдите",
+    re.I,
+)
+DELIVERY_WORDS = re.compile(
+    r"самовывоз|транспортн|курьер|бесплатн|по\s+росси|рефрижератор|собственн\w+\s+транспорт|"
+    r"своя\s+логистик|тк\b|сдэк|деловые линии|пэк\b",
+    re.I,
+)
 GEO_ALL = re.compile(r"по\s+всей\s+Росси|доставка\s+по\s+РФ|всей\s+территории\s+Росси", re.I)
 GEO_AREA = re.compile(
     r"по\s+([А-ЯЁ][а-яё]+(?:ой|ской|кой)\s+(?:области|край|краю|республике))|"
@@ -354,11 +364,16 @@ def _price(text: str) -> dict | None:
 
 def _delivery(text: str) -> str:
     for line in DELIVERY_LINE.findall(text):
-        clean = line.strip(" -–—:;,")
-        if len(clean) < 12 or len(clean) > 90:
+        clean = SPACES.sub(" ", line).strip(" -–—:;,")
+        if len(clean) < 14 or len(clean) > 90:
             continue
-        if DELIVERY_FAST.search(clean) or re.search(r"\d", clean):
-            return clean[0].upper() + clean[1:]
+        if NAV_WORDS.search(clean):
+            continue
+        if not (
+            DELIVERY_FAST.search(clean) or DELIVERY_WORDS.search(clean) or re.search(r"\d", clean)
+        ):
+            continue
+        return clean[0].upper() + clean[1:]
     return ""
 
 

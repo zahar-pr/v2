@@ -1,6 +1,26 @@
+import csv
+import io
+from urllib.parse import quote
+
 import catalog
+import domain
+import scoring
 
 NO_SITE = "—"
+STATUSES = (
+    {"id": "new", "title": "Новый"},
+    {"id": "calling", "title": "В работе"},
+    {"id": "quoted", "title": "Запросили КП"},
+    {"id": "fit", "title": "Подходит"},
+    {"id": "rejected", "title": "Отказ"},
+)
+KINDS = (
+    {"id": "producer", "title": "Производство"},
+    {"id": "wholesale", "title": "Оптовая база"},
+    {"id": "retail", "title": "Розничная точка"},
+    {"id": "unknown", "title": "Не определён"},
+)
+SUPPLY_KINDS = ("producer", "wholesale", "unknown")
 
 
 def meta(stats: dict, state: dict, sources: list[dict]) -> dict:
@@ -13,11 +33,29 @@ def meta(stats: dict, state: dict, sources: list[dict]) -> dict:
             **{region: list(catalog.cities_of(region)) for region in catalog.REGIONS},
         },
         "sorts": list(catalog.SORTS),
+        "kinds": list(KINDS),
+        "supplyKinds": list(SUPPLY_KINDS),
+        "statuses": list(STATUSES),
+        "factors": [
+            {"id": factor.id, "title": factor.title, "hint": factor.hint}
+            for factor in scoring.FACTORS
+        ],
+        "presets": [
+            {
+                "id": key,
+                "title": preset["title"],
+                "hint": preset["hint"],
+                "weights": preset["weights"],
+            }
+            for key, preset in scoring.PRESETS.items()
+        ],
         "defaults": {
             "category": catalog.ANY,
             "region": catalog.ANY_REGION_TITLE,
             "city": catalog.ANY_CITY_TITLE,
             "sort": catalog.SORTS[0],
+            "preset": scoring.DEFAULT_PRESET,
+            "kinds": list(SUPPLY_KINDS),
         },
         "labels": {
             "anyCategory": catalog.ANY_CATEGORY_TITLE,
@@ -38,40 +76,87 @@ def status(state: dict) -> dict:
         "citiesTotal": state["cities_total"],
         "enriching": state["enriching"],
         "enriched": state["enriched"],
+        "egrul": state.get("egrul", 0),
     }
 
 
-def page(rows: list[dict], total: int, page_number: int, per_page: int, notes: dict) -> dict:
+def page(
+    rows: list[dict],
+    total: int,
+    page_number: int,
+    per_page: int,
+    notes: dict,
+    statuses: dict,
+    weights: dict,
+    preset: str,
+) -> dict:
     pages = max(1, -(-total // per_page))
+    start = (page_number - 1) * per_page
     return {
-        "items": [card(row, notes) for row in rows],
+        "items": [
+            card(row, notes, statuses, weights, rank=start + number + 1)
+            for number, row in enumerate(rows)
+        ],
         "total": total,
         "page": page_number,
         "pages": pages,
         "perPage": per_page,
+        "weights": weights,
+        "preset": preset,
     }
 
 
-def card(row: dict, notes: dict) -> dict:
+def card(row: dict, notes: dict, statuses: dict, weights: dict, rank: int = 0) -> dict:
     cats = [catalog.title(item) for item in row["cats"].split(",") if item]
-    if row.get("kind") and row["kind"] not in cats:
-        cats.append(row["kind"])
+    kind = row.get("kind", "")
+    if kind and kind != catalog.UNKNOWN_KIND and kind not in cats:
+        cats.append(kind)
+
+    factors = scoring.evaluate(scoring.with_age(row))
+    score = scoring.total(factors, weights)
+    level, verdict = scoring.verdict_of(score)
+    kind_class = row.get("kind_class") or "unknown"
+
     return {
         "id": row["id"],
+        "rank": rank,
         "name": row["name"],
         "city": row["city"],
         "region": row["region"],
         "cats": cats,
         "kind": row.get("kind", ""),
+        "type": kind_class,
+        "typeTitle": domain.type_title(kind_class),
+        "score": score,
+        "level": level,
+        "verdict": verdict,
+        "factors": [
+            {
+                "id": factor.id,
+                "title": factor.title,
+                "hint": factor.hint,
+                "score": factors[factor.id]["score"],
+                "weight": weights.get(factor.id, 0),
+                "plus": factors[factor.id]["plus"],
+                "minus": factors[factor.id]["minus"],
+                "ask": factors[factor.id]["ask"],
+            }
+            for factor in scoring.FACTORS
+        ],
+        "ask": [question for factor in scoring.FACTORS for question in factors[factor.id]["ask"]],
         "rating": row.get("rating"),
         "reviews": row.get("reviews"),
         "sourcesCount": len(row.get("sources") or []),
         "moq": row.get("moq", ""),
         "moqValue": row.get("moq_value"),
         "price": row.get("price", ""),
+        "priceList": row.get("price_list", ""),
         "delivery": row.get("delivery", ""),
+        "ownDelivery": bool(row.get("own_delivery")),
         "geo": row.get("geo", ""),
+        "distanceKm": row.get("distance_km"),
         "years": row.get("years", ""),
+        "founded": row.get("founded"),
         "verified": bool(row.get("verified")),
         "verifiedBy": row.get("verified_by", ""),
         "certs": row.get("certs") or [],
@@ -82,23 +167,44 @@ def card(row: dict, notes: dict) -> dict:
         "site": _domain(row.get("website", "")),
         "phones": row.get("phones") or [],
         "emails": row.get("emails") or [],
+        "socials": row.get("socials") or [],
+        "checkLinks": _check_links(row),
         "address": row.get("address", ""),
         "hours": row.get("hours", ""),
         "wholesale": bool(row.get("wholesale")),
         "branches": row.get("branches", 1),
         "inn": row.get("inn", ""),
         "ogrn": row.get("ogrn", ""),
+        "legalName": row.get("egrul_name", ""),
+        "legalHead": row.get("egrul_head", ""),
+        "legalRegistered": row.get("egrul_registered", ""),
+        "legalClosed": bool(row.get("egrul_closed")),
         "source": row.get("source", ""),
         "sourceTitle": row.get("source_title", ""),
         "sources": row.get("sources") or [],
-        "score": row.get("score", 0),
-        "level": row.get("level", "low"),
-        "verdict": row.get("verdict", ""),
-        "plus": row.get("plus") or [],
-        "minus": row.get("minus") or [],
         "checkedAt": row.get("checked_at") or row.get("updated_at") or 0,
         "note": notes.get(row["id"], ""),
+        "status": statuses.get(row["id"], "new"),
     }
+
+
+def _check_links(row: dict) -> list[dict]:
+    name = row.get("name", "")
+    city = row.get("city", "")
+    pair = quote(f"{name} {city}".strip())
+    links = [
+        {"title": "Найти в Яндексе", "url": f"https://yandex.ru/search/?text={pair}%20телефон"},
+        {"title": "Найти в 2ГИС", "url": f"https://2gis.ru/search/{pair}"},
+    ]
+    query = row.get("inn") or name
+    if query:
+        links.append(
+            {
+                "title": "Проверить в ЕГРЮЛ",
+                "url": f"https://egrul.nalog.ru/index.html?query={quote(query)}",
+            }
+        )
+    return links
 
 
 def _domain(website: str) -> str:
@@ -109,3 +215,42 @@ def _domain(website: str) -> str:
         return host.encode("ascii").decode("idna")
     except (UnicodeError, ValueError):
         return host
+
+
+EXPORT_COLUMNS = (
+    ("Приоритет", lambda c: c["score"]),
+    ("Вердикт", lambda c: c["verdict"]),
+    ("Название", lambda c: c["name"]),
+    ("Тип", lambda c: c["typeTitle"]),
+    ("Категории", lambda c: ", ".join(c["cats"])),
+    ("Город", lambda c: c["city"]),
+    ("Расстояние, км", lambda c: c["distanceKm"] if c["distanceKm"] is not None else ""),
+    ("Телефон", lambda c: "; ".join(c["phones"])),
+    ("Почта", lambda c: "; ".join(c["emails"])),
+    ("Сайт", lambda c: c["site"] if c["site"] != NO_SITE else ""),
+    ("Минимальный заказ", lambda c: c["moq"]),
+    ("Цена", lambda c: c["price"]),
+    ("Доставка", lambda c: c["delivery"]),
+    ("Документы", lambda c: ", ".join(c["certs"])),
+    ("Юрлицо", lambda c: c["legalName"]),
+    ("Руководитель", lambda c: c["legalHead"]),
+    ("ИНН", lambda c: c["inn"]),
+    ("ОГРН", lambda c: c["ogrn"]),
+    ("Статус", lambda c: _status_title(c["status"])),
+    ("Заметка", lambda c: c["note"]),
+    ("Что уточнить", lambda c: "; ".join(c["ask"])),
+    ("Источник", lambda c: c["source"]),
+)
+
+
+def _status_title(status: str) -> str:
+    return next((item["title"] for item in STATUSES if item["id"] == status), status)
+
+
+def to_csv(cards: list[dict]) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    writer.writerow([title for title, _ in EXPORT_COLUMNS])
+    for card_data in cards:
+        writer.writerow([getter(card_data) for _, getter in EXPORT_COLUMNS])
+    return buffer.getvalue()

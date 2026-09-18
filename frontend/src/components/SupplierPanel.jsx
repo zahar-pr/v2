@@ -1,8 +1,12 @@
-import React, { useEffect } from 'react';
-import { checkedAt, dash, plural, score } from '../data/suppliers.js';
+import React, { useEffect, useState } from 'react';
+import StatusPicker from './StatusPicker.jsx';
+import { checkedAt, dash, distanceOf, plural } from '../data/suppliers.js';
 
-export default function SupplierPanel({ supplier, note, onNote, inCompare, compareFull, onCompare, onClose }) {
+export default function SupplierPanel({
+  supplier, note, statuses, onNote, onStatus, inCompare, compareFull, onCompare, onClose,
+}) {
   const s = supplier;
+  const [done, setDone] = useState({});
   const tel = (value) => value.replace(/[^+\d]/g, '');
 
   useEffect(() => {
@@ -16,20 +20,25 @@ export default function SupplierPanel({ supplier, note, onNote, inCompare, compa
   }, [onClose]);
 
   const facts = [
+    ['Тип поставщика', s.typeTitle],
     ['Категории', s.cats.join(', ')],
-    ['Город', dash(s.city)],
+    ['Город', [s.city, distanceOf(s)].filter(Boolean).join(', ')],
     ...(s.address && s.address !== s.city ? [['Адрес', s.address]] : []),
     ['Часы работы', dash(s.hours)],
-    ['Опт или производство', s.wholesale ? 'да, по данным источника' : 'нет данных'],
     ...(s.branches > 1 ? [['Точек в городе', String(s.branches)]] : []),
-    ['Регион работы', dash(s.geo || s.region)],
+    ['Регион поставок', dash(s.geo || s.region)],
     ['Минимальный заказ', dash(s.moq)],
-    ['Примерная цена', dash(s.price)],
+    ['Цена', dash(s.price)],
     ['Доставка', dash(s.delivery)],
     ['На рынке', dash(s.years)],
-    ...(s.inn ? [['ИНН', s.inn]] : []),
-    ...(s.ogrn ? [['ОГРН', s.ogrn]] : []),
-    ['Готовность к контакту', `${score(s)}%${s.verdict ? ` · ${s.verdict}` : ''}`],
+  ];
+
+  const legal = [
+    ['Юрлицо', dash(s.legalName)],
+    ['Руководитель', dash(s.legalHead)],
+    ['ИНН', dash(s.inn)],
+    ['ОГРН', dash(s.ogrn)],
+    ['Регистрация', dash(s.legalRegistered)],
   ];
 
   return (
@@ -43,21 +52,69 @@ export default function SupplierPanel({ supplier, note, onNote, inCompare, compa
 
         <div className="panel__body">
           <div className="panel__meta">
-            <div className="rating" title="Рейтинг данных: насколько полно заполнена карточка">
-              <strong>{s.rating ? s.rating.toFixed(1) : '—'}</strong><span>/5</span>
+            <div className={`prio prio--${s.level}`}>{s.score}</div>
+            <div>
+              <div className="panel__verdict">{s.verdict}</div>
+              <small>
+                {s.rank ? `${s.rank}-е место в выдаче · ` : ''}
+                {s.sourcesCount} {plural(s.sourcesCount, 'источник', 'источника', 'источников')}
+                {checkedAt(s) ? ` · проверено ${checkedAt(s)}` : ''}
+              </small>
             </div>
-            <small>
-              {s.reviews
-                ? `${s.reviews} ${plural(s.reviews, 'отзыв', 'отзыва', 'отзывов')}`
-                : `${s.sourcesCount} ${plural(s.sourcesCount, 'источник', 'источника', 'источников')}`}
-              {checkedAt(s) ? ` · проверено ${checkedAt(s)}` : ''}
-            </small>
             <span className={`badge ${s.verified ? 'badge--ok' : 'badge--warn'}`}>
               {s.verified ? 'Данные подтверждены' : 'Требует проверки'}
             </span>
           </div>
 
+          {s.legalClosed && (
+            <div className="alarm">
+              В ЕГРЮЛ есть запись о прекращении деятельности — проверьте статус юрлица перед сделкой.
+            </div>
+          )}
+
           {s.about && <p className="panel__about">{s.about}</p>}
+
+          <div>
+            <div className="section-title">Почему такой приоритет</div>
+            <div className="scorecard">
+              {s.factors.map((f) => (
+                <div className="srow" key={f.id}>
+                  <div className="srow__head">
+                    <span className="srow__title" title={f.hint}>{f.title}</span>
+                    <span className="srow__weight">вес {f.weight}%</span>
+                    <span className="srow__score">{f.score}</span>
+                  </div>
+                  <div className="srow__track">
+                    <span className="srow__fill" style={{ width: `${f.score}%` }} />
+                  </div>
+                  {f.plus.map((text) => (
+                    <div className="srow__line srow__line--plus" key={text}>{text}</div>
+                  ))}
+                  {f.minus.map((text) => (
+                    <div className="srow__line srow__line--minus" key={text}>{text}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {s.ask.length > 0 && (
+            <div>
+              <div className="section-title">Что уточнить в первом звонке</div>
+              <div className="asklist">
+                {s.ask.map((question) => (
+                  <label className={`askitem${done[question] ? ' askitem--done' : ''}`} key={question}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(done[question])}
+                      onChange={() => setDone((prev) => ({ ...prev, [question]: !prev[question] }))}
+                    />
+                    {question}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="section-title">Условия работы</div>
@@ -78,17 +135,28 @@ export default function SupplierPanel({ supplier, note, onNote, inCompare, compa
                 <span className="cert" key={c}>{c}</span>
               ))}
             </div>
+            {s.priceList && (
+              <a className="source" href={s.priceList} target="_blank" rel="noreferrer">
+                Прайс-лист на сайте ↗
+              </a>
+            )}
+          </div>
+
+          <div>
+            <div className="section-title">Юрлицо и реквизиты</div>
+            <div className="facts">
+              {legal.map(([k, v]) => (
+                <div className="facts__row" key={k}>
+                  <div className="facts__k">{k}</div>
+                  <div className="facts__v">{v}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div>
             <div className="section-title">Контакты</div>
             <div className="contacts">
-              {s.manager && (
-                <div className="contacts__row">
-                  <span className="contacts__k">Менеджер</span>
-                  <span className="contacts__v">{s.manager}</span>
-                </div>
-              )}
               <div className="contacts__row">
                 <span className="contacts__k">Телефон</span>
                 {s.phones.length ? (
@@ -125,6 +193,34 @@ export default function SupplierPanel({ supplier, note, onNote, inCompare, compa
                   ? <a className="contacts__v" href={`https://${s.site}`} target="_blank" rel="noreferrer">{s.site}</a>
                   : <span className="contacts__v contacts__v--muted">нет сайта</span>}
               </div>
+              {s.socials.length > 0 && (
+                <div className="contacts__row">
+                  <span className="contacts__k">Соцсети</span>
+                  <span className="contacts__v">
+                    {s.socials.map((item, i) => (
+                      <React.Fragment key={item.url}>
+                        {i > 0 && ' · '}
+                        <a href={item.url} target="_blank" rel="noreferrer">{item.title}</a>
+                      </React.Fragment>
+                    ))}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className={`manual${s.phone || s.email ? '' : ' manual--urgent'}`}>
+              <div className="manual__title">
+                {s.phone || s.email
+                  ? 'Проверить данные вручную'
+                  : 'Контактов в открытых источниках нет — найдите вручную'}
+              </div>
+              <div className="sources">
+                {s.checkLinks.map((item) => (
+                  <a className="source" key={item.url} href={item.url} target="_blank" rel="noreferrer">
+                    {item.title} ↗
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -133,13 +229,7 @@ export default function SupplierPanel({ supplier, note, onNote, inCompare, compa
             <div className="sources">
               {(s.sources.length ? s.sources : [{ id: 'none', title: s.sourceTitle, url: s.source }])
                 .map((item) => (
-                  <a
-                    className="source"
-                    key={item.id + item.url}
-                    href={item.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
+                  <a className="source" key={item.id + item.url} href={item.url} target="_blank" rel="noreferrer">
                     {item.title} ↗
                   </a>
                 ))}
@@ -148,7 +238,8 @@ export default function SupplierPanel({ supplier, note, onNote, inCompare, compa
           </div>
 
           <div>
-            <div className="section-title">Заметки по поставщику</div>
+            <div className="section-title">Работа с поставщиком</div>
+            <StatusPicker value={s.status} statuses={statuses} onChange={onStatus} />
             <textarea
               className="note"
               value={note || ''}
@@ -161,10 +252,10 @@ export default function SupplierPanel({ supplier, note, onNote, inCompare, compa
           </div>
 
           <div className="panel__cta">
-            {s.email
-              ? <a href={`mailto:${s.email}`}>Написать поставщику</a>
-              : s.phone
-                ? <a href={`tel:${tel(s.phone)}`}>Позвонить поставщику</a>
+            {s.phone
+              ? <a href={`tel:${tel(s.phone)}`}>Позвонить</a>
+              : s.email
+                ? <a href={`mailto:${s.email}`}>Написать</a>
                 : <a href={s.source} target="_blank" rel="noreferrer">Открыть источник</a>}
             <button
               type="button"

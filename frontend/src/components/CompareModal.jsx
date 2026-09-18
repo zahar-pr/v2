@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { COMPARE_ROWS, score } from '../data/suppliers.js';
+import FactorStrip from './FactorStrip.jsx';
+import { COMPARE_ROWS, weightsToString } from '../data/suppliers.js';
 import { recommend } from '../api/client.js';
 
 function noteRow(notes, s) {
   return notes[s.id] !== undefined ? notes[s.id] : s.note;
 }
 
-export default function CompareModal({ items, notes, narrow, onClear, onClose }) {
-  const [advice, setAdvice] = useState('');
+export default function CompareModal({ items, notes, narrow, preset, weights, onClear, onClose }) {
+  const [advice, setAdvice] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -22,14 +24,14 @@ export default function CompareModal({ items, notes, narrow, onClear, onClose })
   const ids = items.map((s) => s.id).join('|');
 
   useEffect(() => {
-    if (!items.length) { setAdvice(''); return undefined; }
+    if (!items.length) { setAdvice(null); return undefined; }
     let alive = true;
-    setAdvice('Считаем рекомендацию…');
-    recommend(items.map((s) => s.id))
-      .then((answer) => { if (alive) setAdvice(answer.text); })
-      .catch(() => { if (alive) setAdvice(''); });
+    setLoading(true);
+    recommend(items.map((s) => s.id), preset, weightsToString(weights))
+      .then((answer) => { if (alive) { setAdvice(answer); setLoading(false); } })
+      .catch(() => { if (alive) { setAdvice(null); setLoading(false); } });
     return () => { alive = false; };
-  }, [ids]);
+  }, [ids, preset]);
 
   const rows = [
     ...COMPARE_ROWS,
@@ -48,7 +50,40 @@ export default function CompareModal({ items, notes, narrow, onClear, onClose })
 
           {items.length === 0 && (
             <div className="modal__hint">
-              Добавьте в сравнение до трех поставщиков кнопкой «Сравнить» в карточке.
+              Добавьте в сравнение до трёх поставщиков кнопкой «Сравнить» в карточке.
+            </div>
+          )}
+
+          {items.length > 0 && (
+            <div className="cmpheads">
+              {items.map((s) => (
+                <div className="cmphead" key={s.id}>
+                  <div className={`prio prio--${s.level}`}>{s.score}</div>
+                  <div>
+                    <strong>{s.name}</strong>
+                    <small>{s.typeTitle} · {s.city}</small>
+                  </div>
+                  <FactorStrip factors={s.factors} onOpen={() => {}} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {loading && <div className="modal__hint">Считаем, кто впереди…</div>}
+
+          {advice && advice.diff.length > 0 && (
+            <div className="diff">
+              <div className="diff__title">Почему впереди «{(items.find((s) => s.id === advice.bestId) || {}).name}»</div>
+              {advice.diff.map((row) => (
+                <div className="diff__row" key={row.factor}>
+                  <span className="diff__factor">{row.factor}</span>
+                  <span className="diff__gap">+{row.gap}</span>
+                  <span className="diff__text">
+                    <b>{row.leader}</b>: {row.reason || 'данные полнее'}
+                    {row.lack ? <> · у второго {row.lack}</> : null}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
 
@@ -61,7 +96,7 @@ export default function CompareModal({ items, notes, narrow, onClear, onClose })
                     {items.map((s) => (
                       <th key={s.id}>
                         <strong>{s.name}</strong>
-                        <small>{s.city} · готовность {score(s)}%</small>
+                        <small>{s.city}</small>
                       </th>
                     ))}
                   </tr>
@@ -88,7 +123,7 @@ export default function CompareModal({ items, notes, narrow, onClear, onClose })
                 <div className="cmpcard" key={s.id} style={{ animationDelay: `${i * 0.06}s` }}>
                   <div className="cmpcard__head">
                     <strong>{s.name}</strong>
-                    <small>{s.city} · готовность {score(s)}%</small>
+                    <small>{s.city} · приоритет {s.score}</small>
                   </div>
                   {rows.map((r) => (
                     <div className="cmpcard__row" key={r.label}>
@@ -101,7 +136,7 @@ export default function CompareModal({ items, notes, narrow, onClear, onClose })
             </div>
           )}
 
-          {items.length > 0 && advice && <div className="recommend">{advice}</div>}
+          {advice && advice.text && <div className="recommend">{advice.text}</div>}
         </div>
       </div>
     </div>

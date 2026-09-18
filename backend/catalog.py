@@ -12,6 +12,7 @@ class Category:
 class City:
     name: str
     region: str
+    code: str
 
 
 ANY = "all"
@@ -29,38 +30,77 @@ CATEGORIES = (
             ("wholesale", "supermarket"),
             ("shop", "trade"),
             ("shop", "food"),
+            ("amenity", "marketplace"),
         ),
     ),
     Category(
         "grain",
         "Мука, крупы, зерно",
-        (("craft", "grinding_mill"), ("man_made", "silo"), ("shop", "grain")),
+        (
+            ("craft", "grinding_mill"),
+            ("craft", "oil_mill"),
+            ("man_made", "silo"),
+            ("shop", "grain"),
+            ("industrial", "flour_mill"),
+        ),
     ),
     Category(
         "dairy",
         "Молочное сырьё и сыры",
-        (("shop", "dairy"), ("craft", "dairy"), ("shop", "cheese")),
+        (
+            ("shop", "dairy"),
+            ("craft", "dairy"),
+            ("craft", "cheesemaker"),
+            ("shop", "cheese"),
+            ("industrial", "dairy"),
+        ),
     ),
     Category(
         "meat",
         "Мясо и птица",
-        (("shop", "butcher"), ("industrial", "slaughterhouse"), ("craft", "slaughterhouse")),
+        (
+            ("shop", "butcher"),
+            ("craft", "butcher"),
+            ("industrial", "slaughterhouse"),
+            ("craft", "slaughterhouse"),
+            ("industrial", "meat"),
+        ),
     ),
-    Category("fish", "Рыба и морепродукты", (("shop", "seafood"), ("shop", "fish"))),
+    Category(
+        "fish",
+        "Рыба и морепродукты",
+        (("shop", "seafood"), ("shop", "fish"), ("industrial", "fish")),
+    ),
     Category(
         "vegetables",
         "Овощи, фрукты, зелень",
-        (("shop", "greengrocer"), ("shop", "farm"), ("shop", "vegetables")),
+        (
+            ("shop", "greengrocer"),
+            ("shop", "farm"),
+            ("shop", "vegetables"),
+            ("craft", "agricultural"),
+        ),
     ),
     Category(
         "bakery",
         "Хлеб и выпечка",
-        (("craft", "bakery"), ("shop", "bakery"), ("shop", "pastry")),
+        (
+            ("craft", "bakery"),
+            ("shop", "bakery"),
+            ("shop", "pastry"),
+            ("craft", "pastry"),
+            ("industrial", "bakery"),
+        ),
     ),
     Category(
         "confectionery",
         "Кондитерские изделия",
-        (("shop", "confectionery"), ("craft", "confectionery"), ("shop", "chocolate")),
+        (
+            ("shop", "confectionery"),
+            ("craft", "confectionery"),
+            ("craft", "chocolatier"),
+            ("shop", "chocolate"),
+        ),
     ),
     Category(
         "drinks",
@@ -70,44 +110,61 @@ CATEGORIES = (
             ("shop", "water"),
             ("craft", "brewery"),
             ("craft", "winery"),
+            ("craft", "distillery"),
+            ("industrial", "brewery"),
             ("shop", "coffee"),
             ("shop", "tea"),
         ),
     ),
     Category(
+        "frozen",
+        "Заморозка и полуфабрикаты",
+        (("shop", "frozen_food"), ("industrial", "cold_storage"), ("shop", "deli")),
+    ),
+    Category(
+        "spices",
+        "Специи и ингредиенты",
+        (("shop", "spices"), ("shop", "herbs"), ("shop", "nuts"), ("shop", "honey")),
+    ),
+    Category(
         "packaging",
         "Пищевая упаковка",
-        (("shop", "packaging"), ("craft", "packaging"), ("shop", "houseware")),
+        (
+            ("shop", "packaging"),
+            ("craft", "packaging"),
+            ("shop", "houseware"),
+            ("industrial", "packaging"),
+        ),
     ),
 )
 
 CITIES = (
-    City("Москва", "Москва и область"),
-    City("Подольск", "Москва и область"),
-    City("Тула", "Москва и область"),
-    City("Санкт-Петербург", "Санкт-Петербург и область"),
-    City("Великий Новгород", "Санкт-Петербург и область"),
-    City("Краснодар", "Юг России"),
-    City("Ростов-на-Дону", "Юг России"),
-    City("Сочи", "Юг России"),
-    City("Волгоград", "Юг России"),
-    City("Воронеж", "Юг России"),
-    City("Казань", "Поволжье"),
-    City("Нижний Новгород", "Поволжье"),
-    City("Самара", "Поволжье"),
-    City("Уфа", "Поволжье"),
-    City("Саратов", "Поволжье"),
-    City("Екатеринбург", "Урал"),
-    City("Челябинск", "Урал"),
-    City("Пермь", "Урал"),
-    City("Тюмень", "Урал"),
-    City("Новосибирск", "Сибирь"),
-    City("Красноярск", "Сибирь"),
-    City("Омск", "Сибирь"),
-    City("Барнаул", "Сибирь"),
-    City("Иркутск", "Сибирь"),
-    City("Мурманск", "Север"),
-    City("Архангельск", "Север"),
+    City("Москва", "Москва и область", "77"),
+    City("Подольск", "Москва и область", "50"),
+    City("Тула", "Москва и область", "71"),
+    City("Санкт-Петербург", "Санкт-Петербург и область", "78"),
+    City("Великий Новгород", "Санкт-Петербург и область", "53"),
+    City("Краснодар", "Юг России", "23"),
+    City("Ростов-на-Дону", "Юг России", "61"),
+    City("Сочи", "Юг России", "23"),
+    City("Волгоград", "Юг России", "34"),
+    City("Воронеж", "Юг России", "36"),
+    City("Казань", "Поволжье", "16"),
+    City("Нижний Новгород", "Поволжье", "52"),
+    City("Самара", "Поволжье", "63"),
+    City("Уфа", "Поволжье", "02"),
+    City("Саратов", "Поволжье", "64"),
+    City("Екатеринбург", "Урал", "66"),
+    City("Челябинск", "Урал", "74"),
+    City("Пермь", "Урал", "59"),
+    City("Тюмень", "Урал", "72"),
+    City("Новосибирск", "Сибирь", "54"),
+    City("Красноярск", "Сибирь", "24"),
+    City("Омск", "Сибирь", "55"),
+    City("Барнаул", "Сибирь", "22"),
+    City("Иркутск", "Сибирь", "38"),
+    City("Мурманск", "Север", "51"),
+    City("Архангельск", "Север", "29"),
 )
 
 REGIONS = (
@@ -121,8 +178,8 @@ REGIONS = (
 )
 
 SORTS = (
-    "По готовности",
-    "По рейтингу данных",
+    "По приоритету",
+    "По расстоянию",
     "По минимальному заказу",
     "По названию",
 )
@@ -132,6 +189,21 @@ DEFAULT_REGION = ANY
 DEFAULT_CITY = ANY
 
 KIND_TITLES = {
+    "marketplace": "Рынок",
+    "oil_mill": "Маслозавод",
+    "flour_mill": "Мукомольный завод",
+    "cheesemaker": "Сыроварня",
+    "meat": "Мясопереработка",
+    "distillery": "Завод напитков",
+    "chocolatier": "Шоколадное производство",
+    "agricultural": "Сельхозпроизводство",
+    "frozen_food": "Заморозка",
+    "cold_storage": "Холодильный склад",
+    "deli": "Деликатесы и гастрономия",
+    "spices": "Специи",
+    "herbs": "Травы и приправы",
+    "nuts": "Орехи и сухофрукты",
+    "honey": "Мёд",
     "wholesale": "Оптовая база",
     "trade": "Оптовая торговля",
     "food": "Продукты",

@@ -1,15 +1,22 @@
 import React from 'react';
-import { plural, score } from '../data/suppliers.js';
+import FactorStrip from './FactorStrip.jsx';
+import StatusPicker from './StatusPicker.jsx';
+import { distanceOf, plural, strongest, weakest } from '../data/suppliers.js';
 
-export default function SupplierCard({ supplier, index, inCompare, compareFull, onOpen, onCompare }) {
+export default function SupplierCard({
+  supplier, index, statuses, inCompare, compareFull, onOpen, onCompare, onStatus,
+}) {
   const s = supplier;
+  const strong = strongest(s);
+  const weak = weakest(s);
   const docs = s.certs.length;
-  const matched = score(s);
 
-  const spec = (label, value) => (
+  const spec = (label, value, ok) => (
     <div>
       <div className="specs__k">{label}</div>
-      <div className={`specs__v${value ? '' : ' specs__v--none'}`}>{value || 'нет данных'}</div>
+      <div className={`specs__v${value ? (ok ? ' specs__v--ok' : '') : ' specs__v--none'}`}>
+        {value || 'нет данных'}
+      </div>
     </div>
   );
 
@@ -18,43 +25,62 @@ export default function SupplierCard({ supplier, index, inCompare, compareFull, 
       <div className="card__head">
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="card__title">{s.name}</div>
-          <div className="card__sub">{[s.city, s.cats[0]].filter(Boolean).join(' · ')}</div>
+          <div className="card__sub">
+            {[s.city, distanceOf(s)].filter(Boolean).join(' · ')}
+          </div>
         </div>
         <div className="card__rate">
-          <div className="rating" title="Рейтинг данных: насколько полно заполнена карточка">
-            <strong>{s.rating ? s.rating.toFixed(1) : '—'}</strong><span>/5</span>
+          <div className={`prio prio--${s.level}`} title="Приоритет звонка по вашим настройкам">
+            {s.score}
           </div>
-          <div className="card__reviews">
-            {s.reviews
-              ? `${s.reviews} ${plural(s.reviews, 'отзыв', 'отзыва', 'отзывов')}`
-              : `${s.sourcesCount} ${plural(s.sourcesCount, 'источник', 'источника', 'источников')}`}
-          </div>
+          <div className="card__reviews">{s.verdict}</div>
         </div>
       </div>
 
       <div className="tags">
-        {s.cats.slice(0, 3).map((c) => <span className="tag" key={c}>{c}</span>)}
-        {s.wholesale && <span className="tag tag--ok">опт/производство</span>}
+        <span className={`tag tag--${s.type}`}>{s.typeTitle}</span>
+        {s.cats.slice(0, 2).map((c) => <span className="tag" key={c}>{c}</span>)}
         {s.verified && <span className="tag tag--ok">данные подтверждены</span>}
-        {s.geo && <span className="tag">поставки: {s.geo}</span>}
+      </div>
+
+      <FactorStrip factors={s.factors} onOpen={onOpen} />
+
+      <div className="why">
+        {strong && (
+          <div className="why__row why__row--plus">
+            <b>{strong.title}:</b> {strong.text}
+          </div>
+        )}
+        {weak && (
+          <div className="why__row why__row--minus">
+            <b>{weak.title}:</b> {weak.text}
+          </div>
+        )}
       </div>
 
       <div className="specs">
         {spec('Мин. заказ', s.moq)}
-        {spec('Цена', s.price)}
+        {spec('Цена', s.priceList ? 'прайс на сайте' : s.price, Boolean(s.priceList))}
         {spec('Доставка', s.delivery)}
         <div>
           <div className="specs__k">Документы</div>
           <div className={`specs__v ${docs ? 'specs__v--ok' : 'specs__v--none'}`}>
-            {docs ? `${docs} ${plural(docs, 'документ', 'документа', 'документов')}` : 'нет данных'}
+            {docs ? `${docs} ${plural(docs, 'документ', 'документа', 'документов')}` : 'не найдены'}
           </div>
         </div>
       </div>
 
-      <div className="score">
-        <div className="score__track"><div className="score__fill" style={{ width: `${matched}%` }} /></div>
-        <div className="score__label">готовность {matched}%</div>
-      </div>
+      {!s.phone && !s.email && s.checkLinks.length > 0 && (
+        <a
+          className="card__manual"
+          href={s.checkLinks[0].url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Контактов нет — найти в Яндексе ↗
+        </a>
+      )}
 
       <div className="card__actions">
         <button type="button" className="btn btn--deep" onClick={onOpen}>Подробнее</button>
@@ -66,6 +92,7 @@ export default function SupplierCard({ supplier, index, inCompare, compareFull, 
         >
           {inCompare ? 'В сравнении' : compareFull ? 'Слот занят' : 'Сравнить'}
         </button>
+        <StatusPicker value={s.status} statuses={statuses} onChange={onStatus} compact />
       </div>
     </article>
   );

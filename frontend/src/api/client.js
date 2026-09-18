@@ -25,6 +25,16 @@ function json(path, body, method = 'POST') {
   });
 }
 
+function query(filters) {
+  const search = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== '' && value !== undefined && value !== null && value !== false) {
+      search.set(key, String(value));
+    }
+  });
+  return search;
+}
+
 export function getMeta() {
   return call('/api/meta');
 }
@@ -34,13 +44,11 @@ export function getStatus() {
 }
 
 export function getSuppliers(filters) {
-  const query = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value !== '' && value !== undefined && value !== null && value !== false) {
-      query.set(key, String(value));
-    }
-  });
-  return call('/api/suppliers?' + query);
+  return call('/api/suppliers?' + query(filters));
+}
+
+export function getCallList(filters) {
+  return call('/api/calllist?' + query(filters));
 }
 
 export function getNotes() {
@@ -51,6 +59,10 @@ export function saveNote(supplierId, text) {
   return json('/api/notes', { supplierId, text });
 }
 
-export function recommend(ids) {
-  return json('/api/compare/recommend', { ids });
+export function setStatus(supplierId, status) {
+  return json('/api/pipeline', { supplierId, status });
+}
+
+export function recommend(ids, preset, weights) {
+  return json('/api/compare/recommend', { ids, preset, weights });
 }

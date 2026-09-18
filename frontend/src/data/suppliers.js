@@ -10,17 +10,23 @@ export function plural(n, one, few, many) {
   return many;
 }
 
-export function score(s) {
-  return typeof s.score === 'number' ? s.score : 0;
+export function distanceOf(s) {
+  if (s.distanceKm === null || s.distanceKm === undefined) return '';
+  return `${Math.round(s.distanceKm)} км от центра`;
 }
 
-export function contactsOf(s) {
-  const found = [
-    s.phone && 'телефон',
-    s.email && 'почта',
-    s.site && s.site !== '—' && 'сайт',
-  ].filter(Boolean);
-  return found.length ? `есть ${found.join(', ')}` : 'контактов в источниках нет';
+export function strongest(s) {
+  const ranked = [...s.factors].sort((a, b) => b.score * b.weight - a.score * a.weight);
+  const found = ranked.find((f) => f.plus.length);
+  return found ? { title: found.title, text: found.plus[0] } : null;
+}
+
+export function weakest(s) {
+  const ranked = [...s.factors].sort(
+    (a, b) => (100 - b.score) * b.weight - (100 - a.score) * a.weight
+  );
+  const found = ranked.find((f) => f.minus.length);
+  return found ? { title: found.title, text: found.minus[0] } : null;
 }
 
 export function checkedAt(s) {
@@ -28,17 +34,28 @@ export function checkedAt(s) {
   return new Date(s.checkedAt * 1000).toLocaleDateString('ru-RU');
 }
 
+export function weightsToString(weights) {
+  return Object.entries(weights)
+    .map(([key, value]) => `${key}:${value}`)
+    .join(',');
+}
+
 export const COMPARE_ROWS = [
-  { label: 'Готовность к контакту', get: (s) => `${score(s)}% · ${dash(s.verdict)}`, mint: true },
-  { label: 'Рейтинг данных', get: (s) => (s.rating ? `${s.rating.toFixed(1)} / 5` : '—') },
-  { label: 'Город', get: (s) => dash(s.city) },
+  { label: 'Приоритет звонка', get: (s) => `${s.score} из 100 · ${dash(s.verdict)}`, mint: true },
+  { label: 'Тип поставщика', get: (s) => dash(s.typeTitle) },
+  { label: 'Город', get: (s) => [s.city, distanceOf(s)].filter(Boolean).join(', ') },
   { label: 'Регион работы', get: (s) => dash(s.geo || s.region) },
   { label: 'Минимальный заказ', get: (s) => dash(s.moq) },
-  { label: 'Цена', get: (s) => dash(s.price) },
-  { label: 'Документы', get: (s) => (s.certs.length ? s.certs.join(', ') : 'нет данных') },
+  { label: 'Цена', get: (s) => dash(s.priceList ? 'прайс-лист на сайте' : s.price) },
+  { label: 'Документы', get: (s) => (s.certs.length ? s.certs.join(', ') : 'не найдены') },
   { label: 'Доставка', get: (s) => dash(s.delivery) },
-  { label: 'Опт или производство', get: (s) => (s.wholesale ? 'да' : 'нет данных') },
-  { label: 'Реквизиты', get: (s) => dash([s.inn && `ИНН ${s.inn}`, s.ogrn && `ОГРН ${s.ogrn}`].filter(Boolean).join(' · ')) },
+  { label: 'Юрлицо', get: (s) => dash(s.legalName) },
+  { label: 'Руководитель', get: (s) => dash(s.legalHead) },
+  {
+    label: 'Реквизиты',
+    get: (s) => dash([s.inn && `ИНН ${s.inn}`, s.ogrn && `ОГРН ${s.ogrn}`].filter(Boolean).join(' · ')),
+  },
+  { label: 'На рынке', get: (s) => dash(s.years) },
   {
     label: 'Статус данных',
     get: (s) => (s.verified ? s.verifiedBy || 'подтверждено' : 'требует проверки'),
