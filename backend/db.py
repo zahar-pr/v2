@@ -4,6 +4,8 @@ import sqlite3
 import threading
 import time
 
+import scoring
+
 DB_PATH = os.environ.get(
     "DB_PATH",
     os.path.join(
@@ -54,6 +56,9 @@ CREATE TABLE IF NOT EXISTS suppliers (
     certs TEXT NOT NULL DEFAULT '[]',
     rating REAL,
     reviews INTEGER,
+    reviews_url TEXT NOT NULL DEFAULT '',
+    reviews_source TEXT NOT NULL DEFAULT '',
+    reviews_checked REAL NOT NULL DEFAULT 0,
     verified INTEGER NOT NULL DEFAULT 0,
     verified_by TEXT NOT NULL DEFAULT '',
     score INTEGER NOT NULL DEFAULT 0,
@@ -90,11 +95,19 @@ CREATE INDEX IF NOT EXISTS suppliers_score ON suppliers(score DESC);
 CREATE INDEX IF NOT EXISTS suppliers_enrich ON suppliers(enriched_at, enrich_tries);
 
 CREATE TABLE IF NOT EXISTS notes (
-    user_id TEXT NOT NULL,
-    supplier_id TEXT NOT NULL,
+    supplier_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL DEFAULT '',
     text TEXT NOT NULL DEFAULT '',
+    updated_at REAL NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS checks (
+    supplier_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    author TEXT NOT NULL DEFAULT '',
     updated_at REAL NOT NULL DEFAULT 0,
-    PRIMARY KEY (user_id, supplier_id)
+    PRIMARY KEY (supplier_id, question)
 );
 
 CREATE TABLE IF NOT EXISTS comments (
@@ -122,11 +135,11 @@ CREATE TABLE IF NOT EXISTS centers (
 );
 
 CREATE TABLE IF NOT EXISTS pipeline (
-    user_id TEXT NOT NULL,
-    supplier_id TEXT NOT NULL,
+    supplier_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'new',
-    updated_at REAL NOT NULL DEFAULT 0,
-    PRIMARY KEY (user_id, supplier_id)
+    updated_at REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS refreshes (
@@ -203,6 +216,8 @@ ENRICHED_FIELDS = (
     "legal_name",
     "legal_status",
     "legal_active",
+    "reviews_url",
+    "reviews_source",
 )
 
 KIND_ORDER = (
@@ -221,6 +236,8 @@ SCORE_COLUMNS = (
 
 
 def priority_sql(weights: dict) -> str:
+    if not weights or not any(weights.values()):
+        weights = dict(scoring.PRESETS[scoring.DEFAULT_PRESET]["weights"])
     parts = []
     total = 0
     for column in SCORE_COLUMNS:
@@ -246,6 +263,9 @@ _connection: sqlite3.Connection | None = None
 
 
 ADDED_COLUMNS = (
+    ("reviews_url", "TEXT NOT NULL DEFAULT ''"),
+    ("reviews_source", "TEXT NOT NULL DEFAULT ''"),
+    ("reviews_checked", "REAL NOT NULL DEFAULT 0"),
     ("comments_count", "INTEGER NOT NULL DEFAULT 0"),
     ("comments_rating", "REAL"),
     ("area", "TEXT NOT NULL DEFAULT ''"),
@@ -308,6 +328,25 @@ def _migrate(connection: sqlite3.Connection) -> None:
         if column in known:
             connection.execute(f"ALTER TABLE suppliers DROP COLUMN {column}")
 
+    _rebuild_team_table(connection, "pipeline", "status")
+    _rebuild_team_table(connection, "notes", "text")
+
+
+def _rebuild_team_table(connection: sqlite3.Connection, table: str, value: str) -> None:
+    columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+    if "author" in columns:
+        return
+
+    connection.execute(f"ALTER TABLE {table} RENAME TO {table}_old")
+    connection.executescript(SCHEMA)
+    connection.execute(
+        f"INSERT OR REPLACE INTO {table} (supplier_id, user_id, author, {value}, updated_at) "
+        f"SELECT supplier_id, user_id, '', {value}, updated_at FROM {table}_old "
+        f"WHERE updated_at = (SELECT MAX(updated_at) FROM {table}_old AS inner "
+        f"WHERE inner.supplier_id = {table}_old.supplier_id)"
+    )
+    connection.execute(f"DROP TABLE {table}_old")
+
 
 def row_to_dict(row: sqlite3.Row) -> dict:
     item = dict(row)
@@ -353,6 +392,17 @@ def save_indexed(items: list[dict]) -> int:
         connection.executemany(sql, rows)
         connection.commit()
     return len(rows)
+
+
+def prune_city(city: str, seen_after: float) -> int:
+    with _lock:
+        connection = connect()
+        cursor = connection.execute(
+            "DELETE FROM suppliers WHERE city=? AND id LIKE 'osm:%' AND checked_at < ?",
+            (city, seen_after),
+        )
+        connection.commit()
+    return cursor.rowcount
 
 
 def save_enrichment(supplier_id: str, data: dict) -> None:
@@ -618,41 +668,61 @@ def save_profile(user_id: str, name: str) -> str:
     return name
 
 
-def statuses_of(user_id: str) -> dict:
+def statuses_of() -> dict:
     connection = connect()
-    rows = connection.execute(
-        "SELECT supplier_id, status FROM pipeline WHERE user_id=?", (user_id,)
-    ).fetchall()
+    rows = connection.execute("SELECT supplier_id, status FROM pipeline").fetchall()
     return {row["supplier_id"]: row["status"] for row in rows}
 
 
-def set_status(user_id: str, supplier_id: str, status: str) -> dict:
+def status_authors() -> dict:
+    connection = connect()
+    rows = connection.execute("SELECT supplier_id, author, updated_at FROM pipeline").fetchall()
+    return {row["supplier_id"]: dict(row) for row in rows}
+
+
+def set_status(user_id: str, author: str, supplier_id: str, status: str) -> dict:
     now = time.time()
     with _lock:
         connection = connect()
         if status in ("", "new"):
-            connection.execute(
-                "DELETE FROM pipeline WHERE user_id=? AND supplier_id=?",
-                (user_id, supplier_id),
-            )
+            connection.execute("DELETE FROM pipeline WHERE supplier_id=?", (supplier_id,))
         else:
             connection.execute(
-                "INSERT INTO pipeline (user_id, supplier_id, status, updated_at) "
-                "VALUES (?, ?, ?, ?) ON CONFLICT(user_id, supplier_id) DO UPDATE SET "
-                "status=excluded.status, updated_at=excluded.updated_at",
-                (user_id, supplier_id, status, now),
+                "INSERT INTO pipeline (supplier_id, user_id, author, status, updated_at) "
+                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(supplier_id) DO UPDATE SET "
+                "user_id=excluded.user_id, author=excluded.author, status=excluded.status, "
+                "updated_at=excluded.updated_at",
+                (supplier_id, user_id, author, status, now),
             )
         connection.commit()
     return {"supplier_id": supplier_id, "status": status or "new", "updated_at": now}
 
 
-def status_counts(user_id: str) -> dict:
+def status_counts() -> dict:
     connection = connect()
     rows = connection.execute(
-        "SELECT status, COUNT(*) AS n FROM pipeline WHERE user_id=? GROUP BY status",
-        (user_id,),
+        "SELECT status, COUNT(*) AS n FROM pipeline GROUP BY status"
     ).fetchall()
     return {row["status"]: row["n"] for row in rows}
+
+
+def pending_reviews(limit: int) -> list[dict]:
+    connection = connect()
+    rows = connection.execute(
+        "SELECT * FROM suppliers WHERE reviews_checked = 0 AND kind_class != 'retail' "
+        "ORDER BY " + KIND_ORDER + ", score DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [row_to_dict(row) for row in rows]
+
+
+def mark_reviews_checked(supplier_id: str) -> None:
+    with _lock:
+        connection = connect()
+        connection.execute(
+            "UPDATE suppliers SET reviews_checked=? WHERE id=?", (time.time(), supplier_id)
+        )
+        connection.commit()
 
 
 def pending_fns(limit: int) -> list[dict]:
@@ -739,69 +809,68 @@ def pending_enrichment(limit: int, max_tries: int = 3) -> list[dict]:
     return [row_to_dict(row) for row in rows]
 
 
-def notes_of(user_id: str) -> list[dict]:
+def notes_of() -> list[dict]:
     connection = connect()
     rows = connection.execute(
-        "SELECT supplier_id, text, updated_at FROM notes WHERE user_id=? AND text != '' "
-        "ORDER BY updated_at DESC",
-        (user_id,),
+        "SELECT supplier_id, text, author, updated_at FROM notes WHERE text != '' "
+        "ORDER BY updated_at DESC"
     ).fetchall()
     return [dict(row) for row in rows]
 
 
-def save_note(user_id: str, supplier_id: str, text: str) -> dict:
+def save_note(user_id: str, author: str, supplier_id: str, text: str) -> dict:
     now = time.time()
     with _lock:
         connection = connect()
         connection.execute(
-            "INSERT INTO notes (user_id, supplier_id, text, updated_at) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(user_id, supplier_id) DO UPDATE SET text=excluded.text, "
+            "INSERT INTO notes (supplier_id, user_id, author, text, updated_at) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(supplier_id) DO UPDATE SET "
+            "user_id=excluded.user_id, author=excluded.author, text=excluded.text, "
             "updated_at=excluded.updated_at",
-            (user_id, supplier_id, text, now),
+            (supplier_id, user_id, author, text, now),
         )
         connection.commit()
-    return {"supplier_id": supplier_id, "text": text, "updated_at": now}
+    return {"supplier_id": supplier_id, "text": text, "author": author, "updated_at": now}
 
 
-def delete_note(user_id: str, supplier_id: str) -> None:
+def delete_note(supplier_id: str) -> None:
     with _lock:
         connection = connect()
-        connection.execute(
-            "DELETE FROM notes WHERE user_id=? AND supplier_id=?", (user_id, supplier_id)
-        )
+        connection.execute("DELETE FROM notes WHERE supplier_id=?", (supplier_id,))
         connection.commit()
 
 
-def save_center(city: str, lat: float, lon: float) -> None:
-    with _lock:
-        connection = connect()
-        connection.execute(
-            "INSERT INTO centers (city, lat, lon) VALUES (?, ?, ?) "
-            "ON CONFLICT(city) DO UPDATE SET lat=excluded.lat, lon=excluded.lon",
-            (city, lat, lon),
-        )
-        connection.commit()
-
-
-def center_of(city: str) -> tuple[float, float] | None:
+def checks_of(supplier_id: str) -> list[str]:
     connection = connect()
-    row = connection.execute("SELECT lat, lon FROM centers WHERE city=?", (city,)).fetchone()
-    return (row["lat"], row["lon"]) if row else None
+    rows = connection.execute(
+        "SELECT question FROM checks WHERE supplier_id=?", (supplier_id,)
+    ).fetchall()
+    return [row["question"] for row in rows]
 
 
-def save_distances(city: str, center: tuple[float, float]) -> int:
-    lat, lon = center
+def checks_count() -> dict:
+    connection = connect()
+    rows = connection.execute(
+        "SELECT supplier_id, COUNT(*) AS n FROM checks GROUP BY supplier_id"
+    ).fetchall()
+    return {row["supplier_id"]: row["n"] for row in rows}
+
+
+def set_check(supplier_id: str, question: str, done: bool, author: str) -> None:
     with _lock:
         connection = connect()
-        cursor = connection.execute(
-            "UPDATE suppliers SET distance_km = ROUND("
-            "111.0 * SQRT((lat - ?) * (lat - ?) + "
-            "(lon - ?) * (lon - ?) * 0.33), 1) "
-            "WHERE city = ? AND lat IS NOT NULL AND lon IS NOT NULL",
-            (lat, lat, lon, lon, city),
-        )
+        if done:
+            connection.execute(
+                "INSERT INTO checks (supplier_id, question, author, updated_at) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT(supplier_id, question) DO UPDATE SET "
+                "author=excluded.author, updated_at=excluded.updated_at",
+                (supplier_id, question, author, time.time()),
+            )
+        else:
+            connection.execute(
+                "DELETE FROM checks WHERE supplier_id=? AND question=?", (supplier_id, question)
+            )
         connection.commit()
-    return cursor.rowcount
 
 
 def refreshed_at(city: str) -> float:
@@ -828,6 +897,34 @@ def mark_refreshed(city: str, found: int, note: str = "") -> None:
         connection.commit()
 
 
+def best_defaults() -> dict:
+    connection = connect()
+    alive = "(phones != '[]' OR emails != '[]' OR comments_count > 0 OR reviews_source != '')"
+    region = connection.execute(
+        f"SELECT region, COUNT(*) AS total, SUM(CASE WHEN {alive} THEN 1 ELSE 0 END) AS alive "
+        "FROM suppliers WHERE kind_class != 'retail' AND region != '' "
+        "GROUP BY region ORDER BY alive * 6 + total DESC LIMIT 1"
+    ).fetchone()
+    best_region = region["region"] if region else ""
+
+    rows = connection.execute(
+        f"SELECT cats, COUNT(*) AS total, SUM(CASE WHEN {alive} THEN 1 ELSE 0 END) AS alive "
+        "FROM suppliers WHERE kind_class != 'retail' AND region = ? GROUP BY cats",
+        (best_region,),
+    ).fetchall()
+
+    counts: dict[str, int] = {}
+    for row in rows:
+        weight = (row["alive"] or 0) * 6 + row["total"]
+        for item in (row["cats"] or "").split(","):
+            if item:
+                counts[item] = counts.get(item, 0) + weight
+    return {
+        "region": best_region,
+        "category": max(counts, key=counts.get) if counts else "",
+    }
+
+
 def stats() -> dict:
     connection = connect()
     row = connection.execute(
@@ -836,6 +933,8 @@ def stats() -> dict:
         "SUM(CASE WHEN verified = 1 THEN 1 ELSE 0 END) AS verified, "
         "SUM(CASE WHEN enriched_at > 0 THEN 1 ELSE 0 END) AS enriched, "
         "SUM(CASE WHEN legal_name != '' THEN 1 ELSE 0 END) AS with_legal, "
+        "SUM(CASE WHEN reviews IS NOT NULL OR rating IS NOT NULL AND reviews_source != '' "
+        "THEN 1 ELSE 0 END) AS with_reviews, "
         "SUM(CASE WHEN phones != '[]' THEN 1 ELSE 0 END) AS with_phone, "
         "SUM(CASE WHEN kind_class = 'producer' THEN 1 ELSE 0 END) AS producers, "
         "SUM(CASE WHEN kind_class = 'wholesale' THEN 1 ELSE 0 END) AS wholesale, "
@@ -849,6 +948,7 @@ def stats() -> dict:
         "verified": row["verified"] or 0,
         "enriched": row["enriched"] or 0,
         "withLegal": row["with_legal"] or 0,
+        "withReviews": row["with_reviews"] or 0,
         "withPhone": row["with_phone"] or 0,
         "producers": row["producers"] or 0,
         "wholesale": row["wholesale"] or 0,

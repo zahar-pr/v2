@@ -82,3 +82,7 @@ export function deleteComment(id) {
 export function saveProfile(name) {
   return json('/api/profile', { name });
 }
+
+export function setCheck(supplierId, question, done) {
+  return json('/api/checks', { supplierId, question, done });
+}

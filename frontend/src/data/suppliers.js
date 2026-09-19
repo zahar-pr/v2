@@ -10,13 +10,18 @@ export function plural(n, one, few, many) {
   return many;
 }
 
+export function statusTitle(status, statuses) {
+  const found = (statuses || []).find((item) => item.id === status);
+  return found ? found.title : status;
+}
+
 export function placeOf(s) {
   return [s.city || s.area, distanceOf(s)].filter(Boolean).join(' · ');
 }
 
 export function ratingOf(s) {
-  if (!s.reviews || !s.rating) return null;
-  return { rating: s.rating.toFixed(1), reviews: s.reviews };
+  if (!s.rating || !s.reviewsSource) return null;
+  return { rating: s.rating.toFixed(1), reviews: s.reviews || 0, source: s.reviewsSource };
 }
 
 export function distanceOf(s) {
@@ -56,6 +61,10 @@ export const COMPARE_ROWS = [
   {
     label: 'Оценка команды',
     get: (s) => (s.commentsRating ? `${s.commentsRating} из 5 по ${s.commentsCount} комм.` : 'нет комментариев'),
+  },
+  {
+    label: 'Оценка в справочниках',
+    get: (s) => (ratingOf(s) ? `${s.rating} из 5 · ${s.reviewsSource}` : 'не найдена'),
   },
   { label: 'Отзывы', get: (s) => (ratingOf(s) ? `${s.rating} из 5 по ${s.reviews} отзывам` : 'нет в подключённых источниках') },
   { label: 'Статус в ФНС', get: (s) => dash(s.legalStatus) },

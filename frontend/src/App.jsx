@@ -60,7 +60,6 @@ export default function App() {
   const [callsLoading, setCallsLoading] = useState(false);
   const [explainOpen, setExplainOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [showWeights, setShowWeights] = useState(false);
   const [notes, setNotes] = useState({});
 
   const narrow = useNarrow();
@@ -74,6 +73,7 @@ export default function App() {
       .then((answer) => {
         if (!alive) return;
         setMeta(answer);
+        setCat(answer.defaults.category);
         setRegion(answer.defaults.region);
         setCity(answer.defaults.city);
         setSort(answer.defaults.sort);
@@ -118,6 +118,16 @@ export default function App() {
   }), [settledQuery, cat, region, city, kinds, onlyDocs, onlyVerified, onlyContacts,
     statusFilter, preset, weights, sort]);
 
+  const preselect = (list) => {
+    try {
+      if (localStorage.getItem('provizia_seen')) return;
+      localStorage.setItem('provizia_seen', '1');
+      setCompare(list.slice(0, 2).map((s) => s.id));
+    } catch (error) {
+      setCompare(list.slice(0, 2).map((s) => s.id));
+    }
+  };
+
   const load = useCallback(
     (nextPage, append) => {
       if (!meta) return undefined;
@@ -140,6 +150,7 @@ export default function App() {
           setFacets(answer.facets || null);
           setLoading(false);
           setLoadingMore(false);
+          if (!append) preselect(answer.items);
         })
         .catch((e) => {
           if (!alive) return;
@@ -246,11 +257,6 @@ export default function App() {
     setPreset(id);
     const found = meta.presets.find((p) => p.id === id);
     if (found) setWeights(found.weights);
-  };
-
-  const changeWeights = (next) => {
-    setWeights(next);
-    setPreset('custom');
   };
 
   const changeNote = (supplierId, text) => {
@@ -381,11 +387,10 @@ export default function App() {
               <button type="button" className="panel__close" onClick={() => setFiltersOpen(false)}>✕</button>
             </div>
             <FiltersPanel
-              meta={meta} preset={preset} weights={weights} cat={cat} kinds={kinds}
+              meta={meta} preset={preset} cat={cat} kinds={kinds}
               onlyDocs={onlyDocs} onlyVerified={onlyVerified} onlyContacts={onlyContacts}
-              facets={facets} showWeights={showWeights} anyFilter={anyFilter}
-              onPreset={changePreset} onWeights={changeWeights}
-              onToggleWeights={() => setShowWeights((v) => !v)}
+              facets={facets} anyFilter={anyFilter}
+              onPreset={changePreset}
               onExplain={() => { setExplainOpen(true); setFiltersOpen(false); }}
               onCat={setCat} onKind={toggleKind}
               onDocs={() => setOnlyDocs((v) => !v)}

@@ -1,8 +1,8 @@
 import React from 'react';
 
 export default function FiltersPanel({
-  meta, preset, weights, cat, kinds, onlyDocs, onlyVerified, onlyContacts,
-  facets, showWeights, onPreset, onWeights, onToggleWeights, onExplain,
+  meta, preset, cat, kinds, onlyDocs, onlyVerified, onlyContacts,
+  facets, onPreset, onExplain,
   onCat, onKind, onDocs, onVerified, onContacts, onReset, anyFilter,
 }) {
   if (!meta) return null;
@@ -26,24 +26,6 @@ export default function FiltersPanel({
               <span className="preset__hint">{item.hint}</span>
             </button>
           ))}
-          <button type="button" className="fgroup__link" onClick={onToggleWeights}>
-            {showWeights ? 'Скрыть веса' : 'Настроить веса вручную'}
-          </button>
-          {showWeights && (
-            <div className="weights">
-              {meta.factors.map((f) => (
-                <label className="weight" key={f.id}>
-                  <span className="weight__title" title={f.hint}>{f.title}</span>
-                  <input
-                    type="range" min="0" max="60" step="5"
-                    value={weights[f.id] || 0}
-                    onChange={(e) => onWeights({ ...weights, [f.id]: Number(e.target.value) })}
-                  />
-                  <span className="weight__value">{weights[f.id] || 0}%</span>
-                </label>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 

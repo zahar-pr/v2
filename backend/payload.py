@@ -24,7 +24,8 @@ KINDS = (
 SUPPLY_KINDS = ("producer", "wholesale", "unknown")
 
 
-def meta(stats: dict, state: dict, sources: list[dict]) -> dict:
+def meta(stats: dict, state: dict, sources: list[dict], defaults: dict | None = None) -> dict:
+    defaults = defaults or {}
     return {
         "categories": [{"id": catalog.ANY, "title": catalog.ANY_CATEGORY_TITLE}]
         + [{"id": item.id, "title": item.title} for item in catalog.CATEGORIES],
@@ -51,8 +52,8 @@ def meta(stats: dict, state: dict, sources: list[dict]) -> dict:
             for key, preset in scoring.PRESETS.items()
         ],
         "defaults": {
-            "category": catalog.ANY,
-            "region": catalog.ANY_REGION_TITLE,
+            "category": defaults.get("category") or catalog.ANY,
+            "region": defaults.get("region") or catalog.ANY_REGION_TITLE,
             "city": catalog.ANY_CITY_TITLE,
             "sort": catalog.SORTS[0],
             "preset": scoring.DEFAULT_PRESET,
@@ -92,12 +93,13 @@ def page(
     statuses: dict,
     weights: dict,
     preset: str,
+    checks: dict | None = None,
 ) -> dict:
     pages = max(1, -(-total // per_page))
     start = (page_number - 1) * per_page
     return {
         "items": [
-            card(row, notes, statuses, weights, rank=start + number + 1)
+            card(row, notes, statuses, weights, rank=start + number + 1, checks=checks or {})
             for number, row in enumerate(rows)
         ],
         "total": total,
@@ -109,7 +111,14 @@ def page(
     }
 
 
-def card(row: dict, notes: dict, statuses: dict, weights: dict, rank: int = 0) -> dict:
+def card(
+    row: dict,
+    notes: dict,
+    statuses: dict,
+    weights: dict,
+    rank: int = 0,
+    checks: dict | None = None,
+) -> dict:
     cats = [catalog.title(item) for item in row["cats"].split(",") if item]
     kind = row.get("kind", "")
     if kind and kind != catalog.UNKNOWN_KIND and kind not in cats and len(kind) <= KIND_LIMIT:
@@ -184,6 +193,8 @@ def card(row: dict, notes: dict, statuses: dict, weights: dict, rank: int = 0) -
         "legalStatus": row.get("legal_status", ""),
         "legalActive": bool(row.get("legal_active")),
         "reviewLinks": _review_links(row),
+        "reviewsUrl": row.get("reviews_url", ""),
+        "reviewsSource": row.get("reviews_source", ""),
         "commentsCount": row.get("comments_count", 0) or 0,
         "commentsRating": row.get("comments_rating"),
         "legalName": row.get("legal_name", ""),
@@ -193,8 +204,10 @@ def card(row: dict, notes: dict, statuses: dict, weights: dict, rank: int = 0) -
         "sourceTitle": row.get("source_title", ""),
         "sources": row.get("sources") or [],
         "checkedAt": row.get("checked_at") or row.get("updated_at") or 0,
-        "note": notes.get(row["id"], ""),
+        "note": (notes.get(row["id"]) or {}).get("text", ""),
+        "noteAuthor": (notes.get(row["id"]) or {}).get("author", ""),
         "status": statuses.get(row["id"], "new"),
+        "checksDone": (checks or {}).get(row["id"], []),
     }
 
 

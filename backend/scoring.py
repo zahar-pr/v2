@@ -41,7 +41,7 @@ PRESETS = {
     },
     "trusted": {
         "title": "Проверенные компании",
-        "hint": "Вперёд выходят действующие юрлица с историей и отзывами",
+        "hint": "Вперёд выходят те, у кого есть отзывы, история и чистый статус",
         "weights": {
             "reputation": 45,
             "reach": 10,
@@ -159,28 +159,65 @@ def _box(points: int, plus: list, minus: list, ask: list) -> dict:
 def _reputation(s: dict) -> dict:
     points, plus, minus, ask = 0, [], [], []
 
+    rating = s.get("rating") if s.get("reviews_source") else None
+    reviews = s.get("reviews")
+    if rating:
+        where = s.get("reviews_source") or "справочник"
+        counted = f" по {reviews} отзывам" if reviews else ""
+        if rating >= 4.5:
+            points += 25
+            plus.append(f"оценка {rating} из 5 на {where}{counted}")
+        elif rating >= 4:
+            points += 20
+            plus.append(f"оценка {rating} из 5 на {where}{counted}")
+        elif rating >= 3.5:
+            points += 12
+            plus.append(f"средняя оценка {rating} из 5 на {where}{counted}")
+        else:
+            minus.append(f"низкая оценка {rating} из 5 на {where}{counted}")
+            ask.append("Прочитать отзывы: оценка ниже тройки")
+    else:
+        minus.append("оценок в справочниках отзывов не нашлось")
+        ask.append("Посмотреть отзывы по ссылкам в карточке")
+
+    team = s.get("comments_count") or 0
+    team_rating = s.get("comments_rating")
+    if team_rating:
+        word = domain.plural(team, "комментарий", "комментария", "комментариев")
+        plus.append(f"коллеги оценили на {team_rating} из 5 ({team} {word})")
+        if team_rating >= 4:
+            points += 25
+        elif team_rating >= 3:
+            points += 15
+        else:
+            minus.append(f"низкая оценка команды: {team_rating} из 5")
+    elif team:
+        points += 8
+        word = domain.plural(team, "комментарий", "комментария", "комментариев")
+        plus.append(f"{team} {word} от команды")
+    else:
+        minus.append("команда ещё не оставляла комментариев")
+        ask.append("Записать вывод в комментарий после звонка")
+
     status = s.get("legal_status") or ""
     if s.get("legal_active"):
-        points += 30
+        points += 20
         plus.append(status.lower() if status else "действующее юрлицо по данным ФНС")
     elif status:
         minus.append(f"статус в ФНС: {status.lower()}")
         ask.append("Проверить, действует ли юрлицо")
     else:
         minus.append("юрлицо не найдено в реестрах ФНС")
-        ask.append("Уточнить ИНН и проверить компанию в реестрах")
 
     founded = s.get("founded")
     if founded:
         age = max(0, domain.CURRENT_YEAR - int(founded))
         if age >= 10:
-            points += 35
+            points += 20
         elif age >= 5:
-            points += 25
-        elif age >= 2:
             points += 15
-        else:
-            points += 5
+        elif age >= 2:
+            points += 8
         if age >= 2:
             plus.append(f"на рынке {age} {domain.plural(age, 'год', 'года', 'лет')}")
         else:
@@ -190,41 +227,9 @@ def _reputation(s: dict) -> dict:
 
     okved = s.get("okved") or ""
     if okved:
-        points += 20
+        points += 10
         name = (s.get("okved_name") or "").strip()
         plus.append(f"ОКВЭД {okved}: {name[:70]}" if name else f"ОКВЭД {okved}")
-    else:
-        minus.append("основной вид деятельности не подтверждён")
-
-    team = s.get("comments_count") or 0
-    team_rating = s.get("comments_rating")
-    if team_rating:
-        word = domain.plural(team, "комментарий", "комментария", "комментариев")
-        plus.append(f"коллеги оценили на {team_rating} из 5 ({team} {word})")
-        if team_rating >= 4:
-            points += 20
-        elif team_rating >= 3:
-            points += 10
-        else:
-            minus.append(f"низкая оценка команды: {team_rating} из 5")
-    elif team:
-        points += 5
-        word = domain.plural(team, "комментарий", "комментария", "комментариев")
-        plus.append(f"{team} {word} от команды")
-
-    reviews = s.get("reviews")
-    rating = s.get("rating")
-    if reviews and rating:
-        plus.append(f"рейтинг {rating} по {reviews} отзывам")
-        if rating >= 4.5:
-            points += 15
-        elif rating >= 4:
-            points += 10
-        elif rating < 3.5:
-            minus.append(f"низкий рейтинг: {rating}")
-    elif not team:
-        minus.append("отзывов и комментариев пока нет")
-        ask.append("Посмотреть отзывы по ссылкам и записать вывод в комментарий")
 
     return _box(points, plus, minus, ask)
 

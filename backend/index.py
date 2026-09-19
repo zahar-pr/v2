@@ -6,7 +6,7 @@ import catalog
 import db
 import domain
 import scoring
-from sources import active, egrul, fns, website, wikidata
+from sources import active, egrul, fns, website, wikidata, zoon
 
 USER_AGENT = "ProviziaBot/1.0 (+https://github.com/zahar-pr/v2)"
 REFRESH_TTL = 7 * 24 * 3600
@@ -17,6 +17,8 @@ ENRICH_PARALLEL = 6
 ENRICH_PAUSE = 4.0
 EGRUL_BATCH = 8
 EGRUL_PAUSE = 6.0
+REVIEWS_BATCH = 10
+REVIEWS_PAUSE = 2.5
 FNS_BATCH = 10
 FNS_PAUSE = 3.0
 DISCOVER_PAGES = 3
@@ -31,6 +33,7 @@ state = {
     "enriched": 0,
     "egrul": 0,
     "fns": 0,
+    "reviews": 0,
     "found": 0,
     "errors": [],
 }
@@ -85,8 +88,10 @@ async def refresh_city(city: catalog.City, shared=None) -> int:
                 db.mark_refreshed(city.name, 0, "; ".join(failures))
                 raise domain.SourceUnavailable(failures[0])
 
+            started = time.time()
             merged = merge(records)
             db.save_indexed(merged)
+            db.prune_city(city.name, started)
             await _place_city(client, city)
             rescore(merged)
             db.mark_refreshed(city.name, len(merged), "; ".join(failures))
@@ -591,3 +596,35 @@ def _egrul_record(row: dict, category: str, kind: str) -> dict | None:
         :2000
     ]
     return record
+
+
+async def reviews_forever() -> None:
+    try:
+        async with session() as client:
+            while True:
+                pending = db.pending_reviews(REVIEWS_BATCH)
+                if not pending:
+                    await asyncio.sleep(180)
+                    continue
+                for supplier in pending:
+                    await reviews_one(client, supplier)
+                    await asyncio.sleep(REVIEWS_PAUSE)
+    except asyncio.CancelledError:
+        raise
+
+
+async def reviews_one(client, supplier: dict) -> None:
+    try:
+        found = await zoon.lookup(client, supplier)
+    except Exception:
+        found = None
+
+    db.mark_reviews_checked(supplier["id"])
+    if not found:
+        return
+
+    db.save_enrichment(supplier["id"], found)
+    fresh = db.get(supplier["id"])
+    if fresh:
+        score_one(fresh)
+    state["reviews"] += 1

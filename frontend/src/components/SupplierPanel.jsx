@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import StatusPicker from './StatusPicker.jsx';
 import Comments from './Comments.jsx';
+import { setCheck } from '../api/client.js';
 import { checkedAt, dash, placeOf, plural, ratingOf } from '../data/suppliers.js';
 
 export default function SupplierPanel({
@@ -8,8 +9,21 @@ export default function SupplierPanel({
   inCompare, compareFull, onCompare, onClose,
 }) {
   const s = supplier;
-  const [done, setDone] = useState({});
+  const [done, setDone] = useState(() => new Set(supplier.checksDone || []));
   const tel = (value) => value.replace(/[^+\d]/g, '');
+
+  useEffect(() => {
+    setDone(new Set(supplier.checksDone || []));
+  }, [supplier.id, supplier.checksDone]);
+
+  const toggleCheck = (question) => {
+    const next = new Set(done);
+    const marked = !next.has(question);
+    if (marked) next.add(question);
+    else next.delete(question);
+    setDone(next);
+    setCheck(s.id, question, marked).catch(() => {});
+  };
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -107,11 +121,11 @@ export default function SupplierPanel({
               <div className="section-title">Что уточнить в первом звонке</div>
               <div className="asklist">
                 {s.ask.map((question) => (
-                  <label className={`askitem${done[question] ? ' askitem--done' : ''}`} key={question}>
+                  <label className={`askitem${done.has(question) ? ' askitem--done' : ''}`} key={question}>
                     <input
                       type="checkbox"
-                      checked={Boolean(done[question])}
-                      onChange={() => setDone((prev) => ({ ...prev, [question]: !prev[question] }))}
+                      checked={done.has(question)}
+                      onChange={() => toggleCheck(question)}
                     />
                     {question}
                   </label>
@@ -177,14 +191,18 @@ export default function SupplierPanel({
                 <div className="reviews__score">{s.rating.toFixed(1)}</div>
                 <div>
                   <div className="reviews__count">
-                    {s.reviews} {plural(s.reviews, 'отзыв', 'отзыва', 'отзывов')}
+                    {s.reviews
+                      ? `${s.reviews} ${plural(s.reviews, 'отзыв', 'отзыва', 'отзывов')} на ${s.reviewsSource}`
+                      : `оценка на ${s.reviewsSource}`}
                   </div>
-                  <small>по данным подключённых справочников</small>
+                  {s.reviewsUrl && (
+                    <a href={s.reviewsUrl} target="_blank" rel="noreferrer">Прочитать отзывы ↗</a>
+                  )}
                 </div>
               </div>
             ) : (
               <div className="reviews reviews--empty">
-                Оценок в подключённых источниках нет. Откройте отзывы и решите сами:
+                Оценок в подключённых справочниках не нашлось. Посмотрите сами:
               </div>
             )}
             <div className="sources">
@@ -291,7 +309,9 @@ export default function SupplierPanel({
               placeholder="Например: запросили КП на 20.09, обещали прайс с отсрочкой 14 дней"
             />
             <div className="note__status">
-              {note ? 'Заметка сохраняется автоматически' : 'Заметка пока пустая'}
+              {note
+                ? `Заметка команды${s.noteAuthor ? `, последним правил ${s.noteAuthor}` : ''} — сохраняется автоматически`
+                : 'Заметку видит вся команда'}
             </div>
           </div>
 

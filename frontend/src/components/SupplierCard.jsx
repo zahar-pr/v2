@@ -1,7 +1,7 @@
 import React from 'react';
 import FactorStrip from './FactorStrip.jsx';
 import StatusPicker from './StatusPicker.jsx';
-import { placeOf, plural, ratingOf, strongest, weakest } from '../data/suppliers.js';
+import { placeOf, plural, ratingOf, statusTitle, strongest, weakest } from '../data/suppliers.js';
 
 export default function SupplierCard({
   supplier, index, statuses, inCompare, compareFull, onOpen, onCompare, onStatus,
@@ -38,18 +38,21 @@ export default function SupplierCard({
       <div className="tags">
         <span className={`tag tag--${s.type}`}>{s.typeTitle}</span>
         {ratingOf(s) && (
-          <span className="tag tag--rating">
-            ★ {s.rating.toFixed(1)} · {s.reviews} {plural(s.reviews, 'отзыв', 'отзыва', 'отзывов')}
+          <span className="tag tag--rating" title={`Оценка на ${s.reviewsSource}`}>
+            ★ {s.rating.toFixed(1)} · {s.reviewsSource}
           </span>
         )}
         {s.commentsCount > 0 && (
-          <span className="tag tag--rating">
+          <span className="tag tag--team" title="Оценка вашей команды">
             {s.commentsRating ? `★ ${s.commentsRating} · ` : ''}
-            {s.commentsCount} {plural(s.commentsCount, 'комментарий', 'комментария', 'комментариев')}
+            команда: {s.commentsCount}
           </span>
         )}
         {s.legalActive && <span className="tag tag--ok">действующее юрлицо</span>}
-        {s.cats.slice(0, 2).map((c) => <span className="tag" key={c}>{c}</span>)}
+        {s.cats.slice(0, 2).map((c) => <span className="tag tag--cat" key={c}>{c}</span>)}
+        {s.status !== 'new' && (
+          <span className={`tag tag--status tag--${s.status}`}>{statusTitle(s.status, statuses)}</span>
+        )}
         {s.verified && <span className="tag tag--ok">данные подтверждены</span>}
       </div>
 

@@ -37,6 +37,7 @@ async def lifespan(_app: FastAPI):
         _workers.append(asyncio.create_task(index.enrich_forever()))
         _workers.append(asyncio.create_task(index.egrul_forever()))
         _workers.append(asyncio.create_task(index.fns_forever()))
+        _workers.append(asyncio.create_task(index.reviews_forever()))
     yield
     for task in _workers:
         task.cancel()
@@ -67,6 +68,12 @@ class NoteIn(BaseModel):
 class StatusIn(BaseModel):
     supplierId: str
     status: str = "new"
+
+
+class CheckIn(BaseModel):
+    supplierId: str
+    question: str
+    done: bool = True
 
 
 class CommentIn(BaseModel):
@@ -119,12 +126,13 @@ def _sources_meta() -> list[dict]:
     listed.append({"id": "egrul", "title": "ЕГРЮЛ (ФНС)", "active": True})
     listed.append({"id": "fns", "title": "ФНС: Прозрачный бизнес", "active": True})
     listed.append({"id": "wikidata", "title": "Wikidata", "active": True})
+    listed.append({"id": "zoon", "title": "Отзывы на Zoon", "active": True})
     return listed
 
 
 @app.get("/api/meta")
 def api_meta():
-    return payload.meta(db.stats(), index.state, _sources_meta())
+    return payload.meta(db.stats(), index.state, _sources_meta(), db.best_defaults())
 
 
 @app.get("/api/status")
@@ -192,15 +200,16 @@ async def api_suppliers(
         found,
         page,
         perPage,
-        _notes(owner),
-        db.statuses_of(owner),
+        _notes(),
+        db.statuses_of(),
         used,
         preset,
+        checks=_checks(rows),
     )
     answer["status"] = payload.status(index.state)
     answer["stats"] = db.stats()
     answer["facets"] = facets
-    answer["pipeline"] = db.status_counts(owner)
+    answer["pipeline"] = db.status_counts()
     return answer
 
 
@@ -219,7 +228,7 @@ def api_calllist(
 ):
     owner = user_id(request, response)
     used = _weights(preset, weights)
-    statuses = db.statuses_of(owner)
+    statuses = db.statuses_of()
     rows, _, _ = db.search(
         query=q,
         category="" if category in ("", catalog.ANY) else category,
@@ -232,7 +241,7 @@ def api_calllist(
         page=1,
         per_page=limit * 2,
     )
-    notes = _notes(owner)
+    notes = _notes()
     items = [
         payload.card(row, notes, statuses, used, rank=number + 1)
         for number, row in enumerate(rows)
@@ -277,8 +286,8 @@ def api_export(
         page=1,
         per_page=limit,
     )
-    notes = _notes(owner)
-    statuses = db.statuses_of(owner)
+    notes = _notes()
+    statuses = db.statuses_of()
     cards = [
         payload.card(row, notes, statuses, used, rank=number + 1)
         for number, row in enumerate(rows)
@@ -303,14 +312,25 @@ def api_supplier(
     if row is None:
         raise HTTPException(404, "Поставщик не найден")
     owner = user_id(request, response)
-    return payload.card(row, _notes(owner), db.statuses_of(owner), _weights(preset, weights))
+    return payload.card(
+        row,
+        _notes(),
+        db.statuses_of(),
+        _weights(preset, weights),
+        checks={supplier_id: db.checks_of(supplier_id)},
+    )
 
 
 @app.get("/api/notes")
-def api_notes(owner: str = Depends(user_id)):
+def api_notes():
     return [
-        {"supplierId": item["supplier_id"], "text": item["text"], "updatedAt": item["updated_at"]}
-        for item in db.notes_of(owner)
+        {
+            "supplierId": item["supplier_id"],
+            "text": item["text"],
+            "author": item["author"],
+            "updatedAt": item["updated_at"],
+        }
+        for item in db.notes_of()
     ]
 
 
@@ -320,25 +340,43 @@ def api_save_note(note: NoteIn, owner: str = Depends(user_id)):
         raise HTTPException(404, "Поставщик не найден")
     text = note.text.strip()[:2000]
     if not text:
-        db.delete_note(owner, note.supplierId)
-        return {"supplierId": note.supplierId, "text": "", "updatedAt": 0}
-    saved = db.save_note(owner, note.supplierId, text)
+        db.delete_note(note.supplierId)
+        return {"supplierId": note.supplierId, "text": "", "author": "", "updatedAt": 0}
+    saved = db.save_note(owner, db.profile_of(owner), note.supplierId, text)
     return {
         "supplierId": saved["supplier_id"],
         "text": saved["text"],
+        "author": saved["author"],
         "updatedAt": saved["updated_at"],
     }
 
 
 @app.delete("/api/notes/{supplier_id:path}")
-def api_delete_note(supplier_id: str, owner: str = Depends(user_id)):
-    db.delete_note(owner, supplier_id)
+def api_delete_note(supplier_id: str):
+    db.delete_note(supplier_id)
     return {"ok": True}
 
 
+@app.get("/api/checks/{supplier_id:path}")
+def api_checks(supplier_id: str):
+    return {"done": db.checks_of(supplier_id)}
+
+
+@app.post("/api/checks")
+def api_set_check(body: CheckIn, owner: str = Depends(user_id)):
+    if db.get(body.supplierId) is None:
+        raise HTTPException(404, "Поставщик не найден")
+    db.set_check(body.supplierId, body.question.strip()[:200], body.done, db.profile_of(owner))
+    return {"done": db.checks_of(body.supplierId)}
+
+
 @app.get("/api/pipeline")
-def api_pipeline(owner: str = Depends(user_id)):
-    return {"statuses": db.statuses_of(owner), "counts": db.status_counts(owner)}
+def api_pipeline():
+    return {
+        "statuses": db.statuses_of(),
+        "counts": db.status_counts(),
+        "authors": db.status_authors(),
+    }
 
 
 @app.post("/api/pipeline")
@@ -348,11 +386,11 @@ def api_set_status(body: StatusIn, owner: str = Depends(user_id)):
         raise HTTPException(400, f"Неизвестный статус «{body.status}»")
     if db.get(body.supplierId) is None:
         raise HTTPException(404, "Поставщик не найден")
-    saved = db.set_status(owner, body.supplierId, body.status)
+    saved = db.set_status(owner, db.profile_of(owner), body.supplierId, body.status)
     return {
         "supplierId": saved["supplier_id"],
         "status": saved["status"],
-        "counts": db.status_counts(owner),
+        "counts": db.status_counts(),
     }
 
 
@@ -425,7 +463,7 @@ def api_recommend(body: CompareIn, owner: str = Depends(user_id)):
         return {"bestId": "", "text": "", "cards": [], "diff": []}
 
     used = _weights(body.preset, body.weights)
-    cards = [payload.card(row, _notes(owner), db.statuses_of(owner), used) for row in rows]
+    cards = [payload.card(row, _notes(), db.statuses_of(), used) for row in rows]
     ranked = sorted(cards, key=lambda item: -item["score"])
     best = ranked[0]
     runner = ranked[1] if len(ranked) > 1 else None
@@ -478,6 +516,10 @@ def _recommendation(best: dict, runner: dict | None, cards: list[dict]) -> str:
     return text + "."
 
 
+def _checks(rows: list[dict]) -> dict:
+    return {row["id"]: db.checks_of(row["id"]) for row in rows}
+
+
 def _points(n: int) -> str:
     if n % 10 == 1 and n % 100 != 11:
         return "пункт"
@@ -486,8 +528,11 @@ def _points(n: int) -> str:
     return "пунктов"
 
 
-def _notes(owner: str) -> dict:
-    return {item["supplier_id"]: item["text"] for item in db.notes_of(owner)}
+def _notes() -> dict:
+    return {
+        item["supplier_id"]: {"text": item["text"], "author": item["author"]}
+        for item in db.notes_of()
+    }
 
 
 def _admin(token: str) -> None:

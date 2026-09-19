@@ -960,3 +960,18 @@ td.cell--muted { color: var(--text-2); }
   .filters__toggle { flex: 1 1 100%; justify-content: center; }
   .results__bar { gap: 8px; }
 }
+
+.tag--status { font-weight: 500; }
+.tag--calling { background: #e4f8f8; color: #08706f; }
+.tag--quoted { background: var(--warn-bg); color: var(--warn-ink); }
+.tag--fit { background: var(--mint-bg); color: var(--mint-ink); }
+.tag--rejected { background: var(--chip); color: var(--text-4); }
+.reviews a { font-size: 13px; }
+
+.tag--team { background: #e4f8f8; color: #08706f; }
+.results__preset { margin-left: 4px; }
+
+@media (max-width: 520px) {
+  .tag--cat { display: none; }
+  .card .tags { gap: 5px; }
+}
