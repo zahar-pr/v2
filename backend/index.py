@@ -20,6 +20,7 @@ EGRUL_PAUSE = 6.0
 FNS_BATCH = 10
 FNS_PAUSE = 3.0
 DISCOVER_PAGES = 3
+DISCOVER_FLOOR = 6000
 
 state = {
     "indexing": False,
@@ -291,7 +292,9 @@ async def fns_forever() -> None:
     try:
         async with session() as client:
             await _warm_fns(client)
-            await discover_registry(client)
+            if db.stats()["total"] < DISCOVER_FLOOR:
+                await discover_registry(client)
+                await discover_egrul(client)
             while True:
                 pending = db.pending_fns(FNS_BATCH)
                 if not pending:

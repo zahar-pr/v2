@@ -57,10 +57,6 @@ CREATE TABLE IF NOT EXISTS suppliers (
     verified INTEGER NOT NULL DEFAULT 0,
     verified_by TEXT NOT NULL DEFAULT '',
     score INTEGER NOT NULL DEFAULT 0,
-    level TEXT NOT NULL DEFAULT 'low',
-    verdict TEXT NOT NULL DEFAULT '',
-    plus TEXT NOT NULL DEFAULT '[]',
-    minus TEXT NOT NULL DEFAULT '[]',
     haystack TEXT NOT NULL DEFAULT '',
     score_reach INTEGER NOT NULL DEFAULT 0,
     score_volume INTEGER NOT NULL DEFAULT 0,
@@ -68,13 +64,11 @@ CREATE TABLE IF NOT EXISTS suppliers (
     score_logistics INTEGER NOT NULL DEFAULT 0,
     score_trust INTEGER NOT NULL DEFAULT 0,
     scored_at REAL NOT NULL DEFAULT 0,
+    comments_count INTEGER NOT NULL DEFAULT 0,
+    comments_rating REAL,
     distance_km REAL,
     price_list TEXT NOT NULL DEFAULT '',
     own_delivery INTEGER NOT NULL DEFAULT 0,
-    egrul_name TEXT NOT NULL DEFAULT '',
-    egrul_head TEXT NOT NULL DEFAULT '',
-    egrul_registered TEXT NOT NULL DEFAULT '',
-    egrul_closed INTEGER NOT NULL DEFAULT 0,
     egrul_checked REAL NOT NULL DEFAULT 0,
     okved TEXT NOT NULL DEFAULT '',
     okved_name TEXT NOT NULL DEFAULT '',
@@ -103,6 +97,24 @@ CREATE TABLE IF NOT EXISTS notes (
     PRIMARY KEY (user_id, supplier_id)
 );
 
+CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    author TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL,
+    rating INTEGER,
+    created_at REAL NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS comments_supplier ON comments(supplier_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS profiles (
+    user_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    updated_at REAL NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS centers (
     city TEXT PRIMARY KEY,
     lat REAL NOT NULL,
@@ -128,7 +140,7 @@ CREATE TABLE IF NOT EXISTS refreshes (
 NULLABLE_FIELDS = ("lat", "lon", "distance_km")
 NUMERIC_FIELDS = ("wholesale", "branches", "checked_at")
 
-JSON_FIELDS = ("phones", "emails", "certs", "plus", "minus", "sources", "socials")
+JSON_FIELDS = ("phones", "emails", "certs", "sources", "socials")
 
 INDEXED_FIELDS = (
     "id",
@@ -185,10 +197,6 @@ ENRICHED_FIELDS = (
     "haystack",
     "price_list",
     "own_delivery",
-    "egrul_name",
-    "egrul_head",
-    "egrul_registered",
-    "egrul_closed",
     "egrul_checked",
     "okved",
     "okved_name",
@@ -238,6 +246,8 @@ _connection: sqlite3.Connection | None = None
 
 
 ADDED_COLUMNS = (
+    ("comments_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("comments_rating", "REAL"),
     ("area", "TEXT NOT NULL DEFAULT ''"),
     ("okved", "TEXT NOT NULL DEFAULT ''"),
     ("okved_name", "TEXT NOT NULL DEFAULT ''"),
@@ -258,10 +268,6 @@ ADDED_COLUMNS = (
     ("distance_km", "REAL"),
     ("price_list", "TEXT NOT NULL DEFAULT ''"),
     ("own_delivery", "INTEGER NOT NULL DEFAULT 0"),
-    ("egrul_name", "TEXT NOT NULL DEFAULT ''"),
-    ("egrul_head", "TEXT NOT NULL DEFAULT ''"),
-    ("egrul_registered", "TEXT NOT NULL DEFAULT ''"),
-    ("egrul_closed", "INTEGER NOT NULL DEFAULT 0"),
     ("egrul_checked", "REAL NOT NULL DEFAULT 0"),
 )
 
@@ -280,11 +286,27 @@ def connect() -> sqlite3.Connection:
     return _connection
 
 
+DROPPED_COLUMNS = (
+    "plus",
+    "minus",
+    "level",
+    "verdict",
+    "factors",
+    "egrul_name",
+    "egrul_head",
+    "egrul_registered",
+    "egrul_closed",
+)
+
+
 def _migrate(connection: sqlite3.Connection) -> None:
     known = {row["name"] for row in connection.execute("PRAGMA table_info(suppliers)")}
     for column, definition in ADDED_COLUMNS:
         if column not in known:
             connection.execute(f"ALTER TABLE suppliers ADD COLUMN {column} {definition}")
+    for column in DROPPED_COLUMNS:
+        if column in known:
+            connection.execute(f"ALTER TABLE suppliers DROP COLUMN {column}")
 
 
 def row_to_dict(row: sqlite3.Row) -> dict:
@@ -352,25 +374,6 @@ def mark_enrich_failed(supplier_id: str) -> None:
         connection = connect()
         connection.execute(
             "UPDATE suppliers SET enrich_tries=enrich_tries+1 WHERE id=?", (supplier_id,)
-        )
-        connection.commit()
-
-
-def save_rating(supplier_id: str, score: int, level: str, verdict: str, plus, minus) -> None:
-    with _lock:
-        connection = connect()
-        connection.execute(
-            "UPDATE suppliers SET score=?, level=?, verdict=?, plus=?, minus=?, "
-            "rating=CASE WHEN reviews IS NULL THEN ? ELSE rating END WHERE id=?",
-            (
-                score,
-                level,
-                verdict,
-                json.dumps(plus, ensure_ascii=False),
-                json.dumps(minus, ensure_ascii=False),
-                round(score / 20, 1),
-                supplier_id,
-            ),
         )
         connection.commit()
 
@@ -525,6 +528,96 @@ def unscored(limit: int = 1000) -> list[dict]:
     return [row_to_dict(row) for row in rows]
 
 
+def comments_of(supplier_id: str) -> list[dict]:
+    connection = connect()
+    rows = connection.execute(
+        "SELECT * FROM comments WHERE supplier_id=? ORDER BY created_at DESC LIMIT 100",
+        (supplier_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def comments_by(user_id: str, supplier_id: str) -> int:
+    connection = connect()
+    return connection.execute(
+        "SELECT COUNT(*) FROM comments WHERE user_id=? AND supplier_id=?",
+        (user_id, supplier_id),
+    ).fetchone()[0]
+
+
+def add_comment(user_id: str, supplier_id: str, author: str, text: str, rating) -> dict:
+    now = time.time()
+    with _lock:
+        connection = connect()
+        cursor = connection.execute(
+            "INSERT INTO comments (supplier_id, user_id, author, text, rating, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (supplier_id, user_id, author, text, rating, now),
+        )
+        connection.commit()
+        comment_id = cursor.lastrowid
+    _refresh_comment_stats(supplier_id)
+    return {
+        "id": comment_id,
+        "supplier_id": supplier_id,
+        "user_id": user_id,
+        "author": author,
+        "text": text,
+        "rating": rating,
+        "created_at": now,
+    }
+
+
+def delete_comment(user_id: str, comment_id: int) -> str:
+    with _lock:
+        connection = connect()
+        row = connection.execute(
+            "SELECT supplier_id FROM comments WHERE id=? AND user_id=?", (comment_id, user_id)
+        ).fetchone()
+        if row is None:
+            return ""
+        connection.execute("DELETE FROM comments WHERE id=?", (comment_id,))
+        connection.commit()
+    _refresh_comment_stats(row["supplier_id"])
+    return row["supplier_id"]
+
+
+def _refresh_comment_stats(supplier_id: str) -> None:
+    with _lock:
+        connection = connect()
+        row = connection.execute(
+            "SELECT COUNT(*) AS n, AVG(rating) AS avg_rating FROM comments WHERE supplier_id=?",
+            (supplier_id,),
+        ).fetchone()
+        connection.execute(
+            "UPDATE suppliers SET comments_count=?, comments_rating=?, scored_at=0 WHERE id=?",
+            (
+                row["n"] or 0,
+                round(row["avg_rating"], 1) if row["avg_rating"] else None,
+                supplier_id,
+            ),
+        )
+        connection.commit()
+
+
+def profile_of(user_id: str) -> str:
+    connection = connect()
+    row = connection.execute("SELECT name FROM profiles WHERE user_id=?", (user_id,)).fetchone()
+    return row["name"] if row else ""
+
+
+def save_profile(user_id: str, name: str) -> str:
+    with _lock:
+        connection = connect()
+        connection.execute(
+            "INSERT INTO profiles (user_id, name, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at",
+            (user_id, name, time.time()),
+        )
+        connection.commit()
+    return name
+
+
 def statuses_of(user_id: str) -> dict:
     connection = connect()
     rows = connection.execute(
@@ -619,7 +712,8 @@ def find_by_inn(inn: str) -> dict | None:
 def pending_egrul(limit: int) -> list[dict]:
     connection = connect()
     rows = connection.execute(
-        "SELECT * FROM suppliers WHERE egrul_checked = 0 AND (inn != '' OR wholesale = 1) "
+        "SELECT * FROM suppliers WHERE egrul_checked = 0 AND manager = '' "
+        "AND (inn != '' OR wholesale = 1) "
         "ORDER BY " + KIND_ORDER + ", score_reach DESC LIMIT ?",
         (limit,),
     ).fetchall()
@@ -641,14 +735,6 @@ def pending_enrichment(limit: int, max_tries: int = 3) -> list[dict]:
         "SELECT * FROM suppliers WHERE website != '' AND enriched_at = 0 AND enrich_tries < ? "
         "ORDER BY enrich_tries ASC, " + KIND_ORDER + ", score DESC LIMIT ?",
         (max_tries, limit),
-    ).fetchall()
-    return [row_to_dict(row) for row in rows]
-
-
-def unrated(limit: int = 500) -> list[dict]:
-    connection = connect()
-    rows = connection.execute(
-        "SELECT * FROM suppliers WHERE score = 0 ORDER BY updated_at DESC LIMIT ?", (limit,)
     ).fetchall()
     return [row_to_dict(row) for row in rows]
 
@@ -749,7 +835,7 @@ def stats() -> dict:
         "SUM(CASE WHEN certs != '[]' THEN 1 ELSE 0 END) AS with_docs, "
         "SUM(CASE WHEN verified = 1 THEN 1 ELSE 0 END) AS verified, "
         "SUM(CASE WHEN enriched_at > 0 THEN 1 ELSE 0 END) AS enriched, "
-        "SUM(CASE WHEN egrul_name != '' THEN 1 ELSE 0 END) AS with_egrul, "
+        "SUM(CASE WHEN legal_name != '' THEN 1 ELSE 0 END) AS with_legal, "
         "SUM(CASE WHEN phones != '[]' THEN 1 ELSE 0 END) AS with_phone, "
         "SUM(CASE WHEN kind_class = 'producer' THEN 1 ELSE 0 END) AS producers, "
         "SUM(CASE WHEN kind_class = 'wholesale' THEN 1 ELSE 0 END) AS wholesale, "
@@ -762,7 +848,7 @@ def stats() -> dict:
         "withDocs": row["with_docs"] or 0,
         "verified": row["verified"] or 0,
         "enriched": row["enriched"] or 0,
-        "withEgrul": row["with_egrul"] or 0,
+        "withLegal": row["with_legal"] or 0,
         "withPhone": row["with_phone"] or 0,
         "producers": row["producers"] or 0,
         "wholesale": row["wholesale"] or 0,

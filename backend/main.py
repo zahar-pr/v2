@@ -25,6 +25,7 @@ ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 PER_PAGE = 12
 MAX_PER_PAGE = 60
 CALL_LIMIT = 20
+COMMENT_LIMIT = 20
 _workers: list[asyncio.Task] = []
 
 
@@ -66,6 +67,17 @@ class NoteIn(BaseModel):
 class StatusIn(BaseModel):
     supplierId: str
     status: str = "new"
+
+
+class CommentIn(BaseModel):
+    supplierId: str
+    text: str = ""
+    rating: int | None = None
+    author: str = ""
+
+
+class ProfileIn(BaseModel):
+    name: str = ""
 
 
 class CompareIn(BaseModel):
@@ -342,6 +354,68 @@ def api_set_status(body: StatusIn, owner: str = Depends(user_id)):
         "status": saved["status"],
         "counts": db.status_counts(owner),
     }
+
+
+@app.get("/api/profile")
+def api_profile(owner: str = Depends(user_id)):
+    return {"name": db.profile_of(owner)}
+
+
+@app.post("/api/profile")
+def api_save_profile(body: ProfileIn, owner: str = Depends(user_id)):
+    return {"name": db.save_profile(owner, body.name.strip()[:60])}
+
+
+@app.get("/api/comments/{supplier_id:path}")
+def api_comments(supplier_id: str, request: Request, response: Response):
+    owner = user_id(request, response)
+    rows = db.comments_of(supplier_id)
+    return {
+        "items": [payload.comment(row, owner) for row in rows],
+        "author": db.profile_of(owner),
+    }
+
+
+@app.post("/api/comments")
+def api_add_comment(body: CommentIn, owner: str = Depends(user_id)):
+    if db.get(body.supplierId) is None:
+        raise HTTPException(404, "Поставщик не найден")
+
+    text = body.text.strip()[:2000]
+    if not text:
+        raise HTTPException(400, "Комментарий пустой")
+
+    rating = body.rating
+    if rating is not None and not 1 <= rating <= 5:
+        raise HTTPException(400, "Оценка должна быть от 1 до 5")
+
+    if db.comments_by(owner, body.supplierId) >= COMMENT_LIMIT:
+        raise HTTPException(429, f"Не больше {COMMENT_LIMIT} комментариев к одному поставщику")
+
+    author = (body.author or "").strip()[:60]
+    if author:
+        db.save_profile(owner, author)
+    else:
+        author = db.profile_of(owner)
+
+    saved = db.add_comment(owner, body.supplierId, author, text, rating)
+    _rescore(body.supplierId)
+    return payload.comment(saved, owner)
+
+
+@app.delete("/api/comments/{comment_id}")
+def api_delete_comment(comment_id: int, owner: str = Depends(user_id)):
+    supplier_id = db.delete_comment(owner, comment_id)
+    if not supplier_id:
+        raise HTTPException(404, "Комментарий не найден")
+    _rescore(supplier_id)
+    return {"ok": True}
+
+
+def _rescore(supplier_id: str) -> None:
+    row = db.get(supplier_id)
+    if row:
+        index.score_one(row)
 
 
 @app.post("/api/compare/recommend")

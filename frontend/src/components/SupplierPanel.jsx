@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import StatusPicker from './StatusPicker.jsx';
+import Comments from './Comments.jsx';
 import { checkedAt, dash, placeOf, plural, ratingOf } from '../data/suppliers.js';
 
 export default function SupplierPanel({
-  supplier, note, statuses, onNote, onStatus, inCompare, compareFull, onCompare, onClose,
+  supplier, note, statuses, onNote, onStatus, onComment,
+  inCompare, compareFull, onCompare, onClose,
 }) {
   const s = supplier;
   const [done, setDone] = useState({});
@@ -158,6 +160,18 @@ export default function SupplierPanel({
 
           <div>
             <div className="section-title">Отзывы и оценки</div>
+            {s.commentsRating ? (
+              <div className="reviews">
+                <div className="reviews__score">{s.commentsRating}</div>
+                <div>
+                  <div className="reviews__count">
+                    оценка команды по {s.commentsCount}{' '}
+                    {plural(s.commentsCount, 'комментарию', 'комментариям', 'комментариям')}
+                  </div>
+                  <small>её поставили вы и ваши коллеги ниже на этой странице</small>
+                </div>
+              </div>
+            ) : null}
             {ratingOf(s) ? (
               <div className="reviews">
                 <div className="reviews__score">{s.rating.toFixed(1)}</div>
@@ -264,6 +278,8 @@ export default function SupplierPanel({
             </div>
             {s.verified && s.verifiedBy && <div className="note__status">{s.verifiedBy}</div>}
           </div>
+
+          <Comments supplierId={s.id} onChanged={onComment} />
 
           <div>
             <div className="section-title">Работа с поставщиком</div>

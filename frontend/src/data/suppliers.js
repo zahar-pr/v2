@@ -53,6 +53,10 @@ export const COMPARE_ROWS = [
   { label: 'Приоритет звонка', get: (s) => `${s.score} из 100 · ${dash(s.verdict)}`, mint: true },
   { label: 'Тип поставщика', get: (s) => dash(s.typeTitle) },
   { label: 'Город', get: (s) => placeOf(s) || '—' },
+  {
+    label: 'Оценка команды',
+    get: (s) => (s.commentsRating ? `${s.commentsRating} из 5 по ${s.commentsCount} комм.` : 'нет комментариев'),
+  },
   { label: 'Отзывы', get: (s) => (ratingOf(s) ? `${s.rating} из 5 по ${s.reviews} отзывам` : 'нет в подключённых источниках') },
   { label: 'Статус в ФНС', get: (s) => dash(s.legalStatus) },
   { label: 'ОКВЭД', get: (s) => dash([s.okved, s.okvedName].filter(Boolean).join(' ')) },

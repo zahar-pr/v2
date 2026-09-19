@@ -2,7 +2,7 @@ import os
 
 import catalog
 from catalog import City
-from domain import haystack, is_food_related, looks_wholesale, name_key
+from domain import classify, haystack, is_food_related, name_key
 from sources.base import SupplierSource
 
 ITEMS_URL = "https://catalog.api.2gis.com/3.0/items"
@@ -68,6 +68,9 @@ def _to_record(item: dict, city: City, category_id: str, source_title: str) -> d
         return None
 
     contacts = _contacts(item)
+    kind_class = classify("", name)
+    if kind_class == "unknown" and category_id == "wholesale":
+        kind_class = "wholesale"
     reviews = item.get("reviews") or {}
     point = item.get("point") or {}
     item_id = item.get("id") or ""
@@ -81,13 +84,15 @@ def _to_record(item: dict, city: City, category_id: str, source_title: str) -> d
         "cats": f",{category_id},",
         "cats_titles": [catalog.title(category_id)],
         "kind": _kind(item),
+        "kind_tag": f"2gis={category_id}",
+        "kind_class": kind_class,
         "address": item.get("address_name") or city.name,
         "phones": contacts["phones"],
         "emails": contacts["emails"],
         "socials": [],
         "website": contacts["website"],
         "hours": _hours(item),
-        "wholesale": looks_wholesale(name) or "опт" in (item.get("address_name") or "").lower(),
+        "wholesale": kind_class in ("producer", "wholesale"),
         "branches": 1,
         "lat": point.get("lat"),
         "lon": point.get("lon"),

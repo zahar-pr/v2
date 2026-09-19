@@ -3,6 +3,7 @@ import re
 from html.parser import HTMLParser
 from urllib.parse import unquote, urljoin, urlsplit
 
+import domain
 from domain import haystack
 
 MAX_BYTES = 600_000
@@ -412,17 +413,9 @@ def _about(raw: str, text: str) -> str:
 
 
 def _sources(supplier: dict, start: str, pages: list[dict]) -> list[dict]:
-    known = list(supplier.get("sources") or [])
-    known = [item for item in known if item.get("id") != "website"]
-    known.append(
-        {
-            "id": "website",
-            "title": "Сайт поставщика",
-            "url": start,
-            "pages": [page["url"] for page in pages],
-        }
+    return domain.with_source(
+        supplier, "website", "Сайт поставщика", start, pages=[page["url"] for page in pages]
     )
-    return known
 
 
 def _confirms(supplier: dict, lowered: str, emails: list[str], phones: list[str]) -> bool:
@@ -450,11 +443,3 @@ def _unit(raw: str) -> tuple[str, float]:
         if low.startswith(prefix):
             return title, weight
     return low, 1.0
-
-
-def _plural(n: int) -> str:
-    if n % 10 == 1 and n % 100 != 11:
-        return "год"
-    if 2 <= n % 10 <= 4 and not 10 <= n % 100 < 20:
-        return "года"
-    return "лет"

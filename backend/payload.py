@@ -7,6 +7,7 @@ import domain
 import scoring
 
 NO_SITE = "—"
+KIND_LIMIT = 34
 STATUSES = (
     {"id": "new", "title": "Новый"},
     {"id": "calling", "title": "В работе"},
@@ -77,6 +78,8 @@ def status(state: dict) -> dict:
         "enriching": state["enriching"],
         "enriched": state["enriched"],
         "egrul": state.get("egrul", 0),
+        "fns": state.get("fns", 0),
+        "found": state.get("found", 0),
     }
 
 
@@ -109,7 +112,7 @@ def page(
 def card(row: dict, notes: dict, statuses: dict, weights: dict, rank: int = 0) -> dict:
     cats = [catalog.title(item) for item in row["cats"].split(",") if item]
     kind = row.get("kind", "")
-    if kind and kind != catalog.UNKNOWN_KIND and kind not in cats:
+    if kind and kind != catalog.UNKNOWN_KIND and kind not in cats and len(kind) <= KIND_LIMIT:
         cats.append(kind)
 
     factors = scoring.evaluate(scoring.with_age(row))
@@ -181,10 +184,11 @@ def card(row: dict, notes: dict, statuses: dict, weights: dict, rank: int = 0) -
         "legalStatus": row.get("legal_status", ""),
         "legalActive": bool(row.get("legal_active")),
         "reviewLinks": _review_links(row),
-        "legalName": row.get("legal_name") or row.get("egrul_name", ""),
-        "legalHead": row.get("egrul_head", ""),
-        "legalRegistered": row.get("egrul_registered", ""),
-        "legalClosed": bool(row.get("egrul_closed")),
+        "commentsCount": row.get("comments_count", 0) or 0,
+        "commentsRating": row.get("comments_rating"),
+        "legalName": row.get("legal_name", ""),
+        "legalHead": row.get("manager", ""),
+        "legalClosed": not bool(row.get("legal_active")) and bool(row.get("legal_status")),
         "source": row.get("source", ""),
         "sourceTitle": row.get("source_title", ""),
         "sources": row.get("sources") or [],
@@ -258,6 +262,8 @@ EXPORT_COLUMNS = (
     ("ОГРН", lambda c: c["ogrn"]),
     ("Статус", lambda c: _status_title(c["status"])),
     ("Заметка", lambda c: c["note"]),
+    ("Оценка команды", lambda c: f'{c["commentsRating"]} из 5' if c["commentsRating"] else ""),
+    ("Комментариев", lambda c: c["commentsCount"] or ""),
     ("Что уточнить", lambda c: "; ".join(c["ask"])),
     ("Источник", lambda c: c["source"]),
 )
@@ -274,3 +280,14 @@ def to_csv(cards: list[dict]) -> str:
     for card_data in cards:
         writer.writerow([getter(card_data) for _, getter in EXPORT_COLUMNS])
     return buffer.getvalue()
+
+
+def comment(row: dict, owner: str) -> dict:
+    return {
+        "id": row["id"],
+        "author": row.get("author") or "Без имени",
+        "text": row["text"],
+        "rating": row.get("rating"),
+        "createdAt": row.get("created_at") or 0,
+        "mine": row.get("user_id") == owner,
+    }

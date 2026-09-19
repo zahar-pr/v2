@@ -1,9 +1,8 @@
 import re
+import time
 
-WHOLESALE_WORDS = re.compile(
-    r"опт|завод|комбинат|фабрик|производ|склад|торговый дом|агро|дистрибьют|поставщик|база",
-    re.I,
-)
+CURRENT_YEAR = time.gmtime().tm_year
+
 NON_FOOD_WORDS = re.compile(
     r"металл|подшипник|автозапчаст|строит|сантехник|мебел|текстил|инструмент|шин[ыа]|"
     r"bearing|ювелир|аптек|одежд|обув|космети|бытов[ао]я хими|электрон|телефон",
@@ -18,6 +17,12 @@ FOOD_WORDS = re.compile(
     r"майонез|кетчуп|сахар|соль|снек|чипс",
     re.I,
 )
+RETAIL_WORDS = re.compile(
+    r"\b(магазин\w*|киоск\w*|павильон\w*|лар[её]к|лавка|буфет|кафе|ресторан\w*|"
+    r"столовая|пиццери\w*|кофейн\w+|чайная|закусочн\w+)\b",
+    re.I,
+)
+WHOLESALE_HINT = re.compile(r"оптов\w*|\bопт\b|cash|мелкоопт", re.I)
 PRODUCER_TAGS = {"craft", "industrial", "man_made"}
 PRODUCER_WORDS = re.compile(
     r"завод|комбинат|фабрик|производ|мельниц|сыроварн|пивоварн|винодель|коптильн|"
@@ -42,22 +47,6 @@ TYPES = {
     "unknown": "Не определён",
 }
 
-CRITERIA = (
-    (25, lambda s: bool(s.get("phones")), "есть телефон", "нет телефона"),
-    (15, lambda s: bool(s.get("website")), "есть сайт", "нет сайта"),
-    (15, lambda s: bool(s.get("emails")), "есть email", "нет email"),
-    (15, lambda s: bool(s.get("wholesale")), "опт или производство", "похоже на розницу"),
-    (10, lambda s: bool(s.get("certs")), "есть документы", "документы не найдены"),
-    (7, lambda s: bool(s.get("inn") or s.get("ogrn")), "есть реквизиты", "нет реквизитов"),
-    (8, lambda s: bool(s.get("address")), "есть адрес", "нет адреса"),
-    (5, lambda s: bool(s.get("hours")), "указаны часы работы", "часы работы неизвестны"),
-)
-VERDICTS = (
-    (65, "high", "Звонить первым"),
-    (40, "mid", "Хороший кандидат"),
-    (0, "low", "Мало данных"),
-)
-
 
 class PlaceNotFound(Exception):
     pass
@@ -65,10 +54,6 @@ class PlaceNotFound(Exception):
 
 class SourceUnavailable(Exception):
     pass
-
-
-def looks_wholesale(name: str) -> bool:
-    return bool(WHOLESALE_WORDS.search(name))
 
 
 def is_food_related(name: str) -> bool:
@@ -79,12 +64,38 @@ def looks_food(text: str) -> bool:
     return bool(FOOD_WORDS.search(text))
 
 
+def plural(n: int, one: str, few: str, many: str) -> str:
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    if 2 <= n % 10 <= 4 and not 10 <= n % 100 < 20:
+        return few
+    return many
+
+
+def years_text(year: int) -> str:
+    age = max(0, CURRENT_YEAR - year)
+    return f"{age} {plural(age, 'год', 'года', 'лет')} (с {year})"
+
+
+def year_of(date: str) -> int | None:
+    parts = (date or "").split(".")
+    return int(parts[2]) if len(parts) == 3 and parts[2].isdigit() else None
+
+
+def with_source(supplier: dict, source_id: str, title: str, url: str, **extra) -> list[dict]:
+    known = [item for item in (supplier.get("sources") or []) if item.get("id") != source_id]
+    known.append({"id": source_id, "title": title, "url": url, **extra})
+    return known
+
+
 def name_key(name: str) -> str:
     return re.sub(r"[^a-zа-я0-9]", "", name.lower())
 
 
 def classify(kind_tag: str, name: str) -> str:
     key, _, value = kind_tag.partition("=")
+    if RETAIL_WORDS.search(name) and not WHOLESALE_HINT.search(name):
+        return "retail"
     if not kind_tag:
         return (
             "producer"
@@ -104,25 +115,6 @@ def classify(kind_tag: str, name: str) -> str:
 
 def type_title(kind_class: str) -> str:
     return TYPES.get(kind_class, TYPES["unknown"])
-
-
-def rate(supplier: dict) -> dict:
-    score, plus, minus = 0, [], []
-    for points, check, good, bad in CRITERIA:
-        if check(supplier):
-            score += points
-            plus.append(good)
-        else:
-            minus.append(bad)
-    level, verdict = next((level, text) for limit, level, text in VERDICTS if score >= limit)
-    return {
-        "score": score,
-        "level": level,
-        "verdict": verdict,
-        "plus": plus,
-        "minus": minus,
-        "rating": round(score / 20, 1),
-    }
 
 
 def haystack(supplier: dict) -> str:

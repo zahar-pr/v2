@@ -1,6 +1,8 @@
 import asyncio
 import re
 
+import domain
+
 SEARCH_URL = "https://egrul.nalog.ru/"
 RESULT_URL = "https://egrul.nalog.ru/search-result/{token}"
 CARD_URL = "https://egrul.nalog.ru/index.html?query={query}"
@@ -90,25 +92,26 @@ def _match(name: str, rows: list[dict]) -> dict | None:
 
 def _to_record(supplier: dict, row: dict, inn: str) -> dict:
     registered = row.get("r") or ""
-    closed_at = row.get("e") or ""
-    closed = bool(closed_at and closed_at != registered)
+    closed = bool(row.get("e") and row.get("e") != registered)
+    head = _head(row.get("g") or "")
     found = {
-        "egrul_name": row.get("n") or row.get("c") or "",
-        "egrul_head": _head(row.get("g") or ""),
-        "egrul_registered": registered,
-        "egrul_closed": 1 if closed else 0,
-        "sources": _sources(supplier, inn or row.get("i", "")),
+        "legal_name": row.get("n") or row.get("c") or "",
+        "legal_status": "Есть запись о прекращении" if closed else "Действующая организация",
+        "legal_active": 0 if closed else 1,
+        "sources": domain.with_source(
+            supplier, "egrul", "ЕГРЮЛ (ФНС)", CARD_URL.format(query=inn or row.get("i", ""))
+        ),
     }
+    if head:
+        found["manager"] = head
     if row.get("i"):
         found["inn"] = row["i"]
     if row.get("o"):
         found["ogrn"] = row["o"]
-    if found["egrul_head"]:
-        found["manager"] = found["egrul_head"]
-    year = _year(registered)
+    year = domain.year_of(registered)
     if year:
         found["founded"] = year
-        found["years"] = f"{2026 - year} {_plural(2026 - year)} (с {year})"
+        found["years"] = domain.years_text(year)
     return found
 
 
@@ -122,33 +125,8 @@ def _head(raw: str) -> str:
     return f"{person} ({role})"
 
 
-def _year(date: str) -> int | None:
-    parts = date.split(".")
-    return int(parts[2]) if len(parts) == 3 and parts[2].isdigit() else None
-
-
 def _key(name: str) -> str:
     return NOISE.sub("", FORMS.sub("", name.strip().strip('"«»'))).lower()
-
-
-def _sources(supplier: dict, query: str) -> list[dict]:
-    known = [item for item in (supplier.get("sources") or []) if item.get("id") != "egrul"]
-    known.append(
-        {
-            "id": "egrul",
-            "title": "ЕГРЮЛ (ФНС)",
-            "url": CARD_URL.format(query=query),
-        }
-    )
-    return known
-
-
-def _plural(n: int) -> str:
-    if n % 10 == 1 and n % 100 != 11:
-        return "год"
-    if 2 <= n % 10 <= 4 and not 10 <= n % 100 < 20:
-        return "года"
-    return "лет"
 
 
 DISCOVERY = (

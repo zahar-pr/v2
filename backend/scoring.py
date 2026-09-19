@@ -1,6 +1,8 @@
 import time
 from dataclasses import dataclass
 
+import domain
+
 NEAR_KM = 10
 CITY_KM = 25
 REGION_KM = 60
@@ -145,14 +147,6 @@ def verdict_of(score: int) -> tuple[str, str]:
     return level, text
 
 
-def _plural(n: int, one: str, few: str, many: str) -> str:
-    if n % 10 == 1 and n % 100 != 11:
-        return one
-    if 2 <= n % 10 <= 4 and not 10 <= n % 100 < 20:
-        return few
-    return many
-
-
 def _box(points: int, plus: list, minus: list, ask: list) -> dict:
     return {
         "score": max(0, min(100, points)),
@@ -178,7 +172,7 @@ def _reputation(s: dict) -> dict:
 
     founded = s.get("founded")
     if founded:
-        age = max(0, 2026 - int(founded))
+        age = max(0, domain.CURRENT_YEAR - int(founded))
         if age >= 10:
             points += 35
         elif age >= 5:
@@ -188,7 +182,7 @@ def _reputation(s: dict) -> dict:
         else:
             points += 5
         if age >= 2:
-            plus.append(f"на рынке {age} {_plural(age, 'год', 'года', 'лет')}")
+            plus.append(f"на рынке {age} {domain.plural(age, 'год', 'года', 'лет')}")
         else:
             minus.append("компания зарегистрирована меньше двух лет назад")
     else:
@@ -202,6 +196,22 @@ def _reputation(s: dict) -> dict:
     else:
         minus.append("основной вид деятельности не подтверждён")
 
+    team = s.get("comments_count") or 0
+    team_rating = s.get("comments_rating")
+    if team_rating:
+        word = domain.plural(team, "комментарий", "комментария", "комментариев")
+        plus.append(f"коллеги оценили на {team_rating} из 5 ({team} {word})")
+        if team_rating >= 4:
+            points += 20
+        elif team_rating >= 3:
+            points += 10
+        else:
+            minus.append(f"низкая оценка команды: {team_rating} из 5")
+    elif team:
+        points += 5
+        word = domain.plural(team, "комментарий", "комментария", "комментариев")
+        plus.append(f"{team} {word} от команды")
+
     reviews = s.get("reviews")
     rating = s.get("rating")
     if reviews and rating:
@@ -212,9 +222,9 @@ def _reputation(s: dict) -> dict:
             points += 10
         elif rating < 3.5:
             minus.append(f"низкий рейтинг: {rating}")
-    else:
-        minus.append("отзывов в подключённых источниках нет")
-        ask.append("Посмотреть отзывы по ссылкам в карточке")
+    elif not team:
+        minus.append("отзывов и комментариев пока нет")
+        ask.append("Посмотреть отзывы по ссылкам и записать вывод в комментарий")
 
     return _box(points, plus, minus, ask)
 
@@ -227,7 +237,7 @@ def _reach(s: dict) -> dict:
         plus.append(
             f"телефон: {phones[0]}"
             if len(phones) == 1
-            else f"{len(phones)} {_plural(len(phones), 'телефон', 'телефона', 'телефонов')}"
+            else f"{len(phones)} {domain.plural(len(phones), 'телефон', 'телефона', 'телефонов')}"
         )
         if len(phones) > 1:
             points += 5
@@ -306,7 +316,7 @@ def _volume(s: dict) -> dict:
     branches = s.get("branches", 1)
     if branches > 1:
         points += 10
-        plus.append(f"{branches} {_plural(branches, 'точка', 'точки', 'точек')} в городе")
+        plus.append(f"{branches} {domain.plural(branches, 'точка', 'точки', 'точек')} в городе")
 
     return _box(points, plus, minus, ask)
 
@@ -328,7 +338,7 @@ def _docs(s: dict) -> dict:
         minus.append("нет ИНН и ОГРН")
         ask.append("Уточнить ИНН для проверки юрлица")
 
-    legal = s.get("legal_name") or s.get("egrul_name")
+    legal = s.get("legal_name")
     if legal:
         points += 30
         plus.append(f"юрлицо подтверждено: {legal[:60]}")

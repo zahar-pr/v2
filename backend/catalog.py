@@ -322,12 +322,9 @@ def region_by_area(area: str) -> str:
 
 def pretty_area(area: str) -> str:
     clean = (area or "").replace("ГОРОД ФЕДЕРАЛЬНОГО ЗНАЧЕНИЯ ", "").strip()
-    return clean.capitalize() if clean.isupper() else clean
-
-
-def region_of(name: str) -> str:
-    found = city(name)
-    return found.region if found else ""
+    if not clean.isupper():
+        return clean
+    return " ".join(word[:1] + word[1:].lower() for word in clean.split())
 
 
 def cities_of(region: str) -> tuple[str, ...]:

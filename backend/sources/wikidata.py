@@ -1,5 +1,7 @@
 from urllib.parse import urlsplit
 
+import domain
+
 SEARCH_URL = "https://www.wikidata.org/w/api.php"
 LIMIT = 5
 WEBSITE = "P856"
@@ -26,13 +28,15 @@ async def enrich(session, supplier: dict) -> dict | None:
         if not any(_host(site) == host for site in sites if site):
             continue
         found: dict = {
-            "sources": _sources(supplier, entity_id),
+            "sources": domain.with_source(
+                supplier, "wikidata", "Wikidata", f"https://www.wikidata.org/wiki/{entity_id}"
+            ),
             "confirmed": True,
         }
         year = _year(claims.get(INCEPTION, []))
         if year:
             found["founded"] = year
-            found["years"] = f"{2026 - year} лет (с {year})"
+            found["years"] = domain.years_text(year)
         return found
     return None
 
@@ -89,15 +93,3 @@ def _host(url: str) -> str:
     if "//" not in url:
         url = "https://" + url
     return urlsplit(url).netloc.lower().replace("www.", "")
-
-
-def _sources(supplier: dict, entity_id: str) -> list[dict]:
-    known = [item for item in (supplier.get("sources") or []) if item.get("id") != "wikidata"]
-    known.append(
-        {
-            "id": "wikidata",
-            "title": "Wikidata",
-            "url": f"https://www.wikidata.org/wiki/{entity_id}",
-        }
-    )
-    return known

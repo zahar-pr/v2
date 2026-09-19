@@ -66,3 +66,19 @@ export function setStatus(supplierId, status) {
 export function recommend(ids, preset, weights) {
   return json('/api/compare/recommend', { ids, preset, weights });
 }
+
+export function getComments(supplierId) {
+  return call('/api/comments/' + supplierId);
+}
+
+export function addComment(supplierId, text, rating, author) {
+  return json('/api/comments', { supplierId, text, rating, author });
+}
+
+export function deleteComment(id) {
+  return call('/api/comments/' + id, { method: 'DELETE' });
+}
+
+export function saveProfile(name) {
+  return json('/api/profile', { name });
+}

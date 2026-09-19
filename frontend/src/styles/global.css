@@ -905,3 +905,58 @@ td.cell--muted { color: var(--text-2); }
   .panel__cta { flex-wrap: wrap; }
   .panel__cta a { flex: 1 1 100%; text-align: center; }
 }
+
+/* ---------- комментарии команды ---------- */
+
+.cmt__avg {
+  margin-left: 10px; padding: 2px 10px; border-radius: 20px;
+  background: var(--mint-bg); color: var(--mint-ink); font-size: 12px;
+  font-family: var(--font-text); letter-spacing: 0;
+}
+.cmt__form { display: grid; gap: 9px; margin-bottom: 14px; }
+.cmt__row { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
+.cmt__name {
+  flex: 1 1 160px; padding: 11px 14px; border-radius: 13px;
+  border: 1px solid var(--line); background: var(--field); font-size: 14px; color: var(--ink);
+}
+.cmt__name:focus { outline: none; border-color: var(--cyan); }
+.cmt__form .note { margin: 0; }
+.cmt__form .btn { flex: none; }
+.cmt__error { font-size: 13px; color: var(--warn-ink); }
+
+.stars { display: flex; gap: 2px; }
+.star {
+  border: none; background: none; cursor: pointer; padding: 2px 3px;
+  font-size: 21px; line-height: 1; color: var(--line);
+  transition: color 0.15s ease, transform 0.15s var(--ease);
+}
+.star:hover { transform: scale(1.12); }
+.star--on { color: #f0b429; }
+
+.cmt__list { display: grid; gap: 9px; margin-top: 12px; }
+.cmt { padding: 12px 14px; background: var(--field); border-radius: 14px; }
+.cmt__head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 6px; }
+.cmt__author { font-size: 14px; font-weight: 500; }
+.cmt__rating { font-size: 13px; color: #8a5a12; }
+.cmt__date { font-size: 12px; color: var(--text-4); }
+.cmt__remove {
+  margin-left: auto; border: none; background: none; cursor: pointer;
+  font-size: 12px; color: var(--text-4); padding: 2px 4px;
+}
+.cmt__remove:hover { color: var(--warn-ink); }
+.cmt__text { font-size: 14px; line-height: 1.5; color: var(--text-2); white-space: pre-wrap; }
+
+/* ---------- мелочи вёрстки ---------- */
+
+.card__title { overflow-wrap: anywhere; }
+.cmt__text, .facts__v, .contacts__v { overflow-wrap: anywhere; }
+.hero__badge { max-width: 100%; }
+.hero__badge span { white-space: normal; }
+
+@media (max-width: 460px) {
+  .hero__badge { align-items: flex-start; }
+  .cmt__row { gap: 8px; }
+  .cmt__name { flex: 1 1 100%; }
+  .filters__toggle { flex: 1 1 100%; justify-content: center; }
+  .results__bar { gap: 8px; }
+}

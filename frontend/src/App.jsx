@@ -12,7 +12,7 @@ import useDebounced from './hooks/useDebounced.js';
 import {
   getCallList, getMeta, getNotes, getStatus, getSuppliers, saveNote, setStatus,
 } from './api/client.js';
-import { plural, weightsToString } from './data/suppliers.js';
+import { weightsToString } from './data/suppliers.js';
 
 const MAX_COMPARE = 3;
 const SKELETONS = [0, 1, 2, 3, 4, 5];
@@ -158,6 +158,13 @@ export default function App() {
     setSelId(null);
     return load(1, false);
   }, [load]);
+
+  useEffect(() => {
+    if (!filtersOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setFiltersOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [filtersOpen]);
 
   useEffect(() => {
     if (!status || !status.indexing) return undefined;
@@ -306,7 +313,7 @@ export default function App() {
         <section className="wrap hero__in">
           <div className="hero__badge">
             <i />
-            <span style={{ whiteSpace: 'nowrap' }}>{badge()}</span>
+            <span>{badge()}</span>
           </div>
           <h1>Кому из поставщиков звонить первым</h1>
 
@@ -499,6 +506,7 @@ export default function App() {
           note={notes[selected.id] !== undefined ? notes[selected.id] : selected.note}
           onNote={(v) => changeNote(selected.id, v)}
           onStatus={(next) => changeStatus(selected.id, next)}
+          onComment={() => load(1, false)}
           inCompare={compare.includes(selected.id)}
           compareFull={compare.length >= MAX_COMPARE && !compare.includes(selected.id)}
           onCompare={() => toggleCompare(selected.id)}

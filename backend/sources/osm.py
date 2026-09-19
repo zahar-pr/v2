@@ -10,7 +10,6 @@ from domain import (
     haystack,
     is_food_related,
     looks_food,
-    looks_wholesale,
 )
 from sources.base import SupplierSource
 

@@ -42,6 +42,12 @@ export default function SupplierCard({
             ★ {s.rating.toFixed(1)} · {s.reviews} {plural(s.reviews, 'отзыв', 'отзыва', 'отзывов')}
           </span>
         )}
+        {s.commentsCount > 0 && (
+          <span className="tag tag--rating">
+            {s.commentsRating ? `★ ${s.commentsRating} · ` : ''}
+            {s.commentsCount} {plural(s.commentsCount, 'комментарий', 'комментария', 'комментариев')}
+          </span>
+        )}
         {s.legalActive && <span className="tag tag--ok">действующее юрлицо</span>}
         {s.cats.slice(0, 2).map((c) => <span className="tag" key={c}>{c}</span>)}
         {s.verified && <span className="tag tag--ok">данные подтверждены</span>}

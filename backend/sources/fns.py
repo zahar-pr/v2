@@ -1,6 +1,8 @@
 import asyncio
 import re
 
+import domain
+
 SEARCH_URL = "https://pb.nalog.ru/search-proc.json"
 HOME_URL = "https://pb.nalog.ru/search.html"
 CARD_URL = "https://pb.nalog.ru/company.html?token={token}"
@@ -204,16 +206,21 @@ def _to_record(supplier: dict, row: dict) -> dict:
         "legal_active": 0 if row.get("pr_liq") == "1" else 1,
         "okved": okved,
         "okved_name": row.get("okved2mainname") or "",
-        "sources": _sources(supplier, row),
+        "sources": domain.with_source(
+            supplier,
+            "fns",
+            "ФНС: Прозрачный бизнес",
+            CARD_URL.format(token=row.get("token") or "") if row.get("token") else HOME_URL,
+        ),
     }
     if row.get("inn"):
         found["inn"] = row["inn"]
     if row.get("ogrn"):
         found["ogrn"] = row["ogrn"]
-    year = _year(row.get("dtreg") or "")
+    year = domain.year_of(row.get("dtreg") or "")
     if year:
         found["founded"] = year
-        found["years"] = f"{2026 - year} {_plural(2026 - year)} (с {year})"
+        found["years"] = domain.years_text(year)
     return found
 
 
@@ -260,31 +267,5 @@ def _is_supplier(okved: str) -> bool:
     return okved.startswith(FOOD_OKVED) or okved.startswith(PACKAGING_OKVED)
 
 
-def _year(date: str) -> int | None:
-    parts = date.split(".")
-    return int(parts[2]) if len(parts) == 3 and parts[2].isdigit() else None
-
-
 def _key(name: str) -> str:
     return NOISE.sub("", FORMS.sub("", (name or "").strip().strip('"«»'))).lower()
-
-
-def _sources(supplier: dict, row: dict) -> list[dict]:
-    known = [item for item in (supplier.get("sources") or []) if item.get("id") != "fns"]
-    token = row.get("token") or ""
-    known.append(
-        {
-            "id": "fns",
-            "title": "ФНС: Прозрачный бизнес",
-            "url": CARD_URL.format(token=token) if token else HOME_URL,
-        }
-    )
-    return known
-
-
-def _plural(n: int) -> str:
-    if n % 10 == 1 and n % 100 != 11:
-        return "год"
-    if 2 <= n % 10 <= 4 and not 10 <= n % 100 < 20:
-        return "года"
-    return "лет"
