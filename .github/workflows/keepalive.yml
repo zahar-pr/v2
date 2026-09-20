@@ -10,10 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: ping site
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://provizia.onrender.com' }}
         run: |
-          if [ -z "${{ vars.SITE_URL }}" ]; then
-            echo "SITE_URL не задан, пропускаю"
-            exit 0
-          fi
-          curl -sSf --max-time 60 "${{ vars.SITE_URL }}/api/meta" > /dev/null
-          echo "сайт отвечает"
+          for attempt in 1 2 3; do
+            if curl -sSf --max-time 90 "$SITE_URL/api/meta" > /dev/null; then
+              echo "сайт отвечает: $SITE_URL"
+              exit 0
+            fi
+            echo "попытка $attempt не прошла, инстанс просыпается"
+            sleep 30
+          done
+          echo "сайт не ответил за три попытки"
+          exit 1
