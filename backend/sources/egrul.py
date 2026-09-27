@@ -93,7 +93,7 @@ def _match(name: str, rows: list[dict]) -> dict | None:
 def _to_record(supplier: dict, row: dict, inn: str) -> dict:
     registered = row.get("r") or ""
     closed = bool(row.get("e") and row.get("e") != registered)
-    head = _head(row.get("g") or "")
+    head = head_of(row.get("g") or "")
     found = {
         "legal_name": row.get("n") or row.get("c") or "",
         "legal_status": "Есть запись о прекращении" if closed else "Действующая организация",
@@ -115,7 +115,7 @@ def _to_record(supplier: dict, row: dict, inn: str) -> dict:
     return found
 
 
-def _head(raw: str) -> str:
+def head_of(raw: str) -> str:
     found = ROLE.match(raw.strip())
     if not found:
         return raw.strip()

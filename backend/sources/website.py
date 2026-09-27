@@ -135,67 +135,52 @@ async def enrich(session, supplier: dict) -> dict | None:
     if not pages:
         return None
 
-    text = SPACES.sub(" ", " ".join(page["text"] for page in pages))
     raw = " ".join(page["raw"] for page in pages)
+    text = SPACES.sub(" ", " ".join(page["text"] for page in pages))
     about = _about(raw, text)
     text = f"{text} {about}".strip()
-    lowered = text.lower()
-    host = urlsplit(start).netloc
-
-    if not text or not _relevant(supplier, lowered):
+    if not text or not _relevant(supplier, text.lower()):
         return None
 
-    emails = _emails(text, host)
+    emails = _emails(text, urlsplit(start).netloc)
     phones = _phones(text)
     certs = [title for pattern, title in CERTS if pattern.search(text)]
 
-    found: dict = {
-        "sources": _sources(supplier, start, pages),
-        "certs": certs,
-    }
-
+    found = {"sources": _sources(supplier, start, pages), "certs": certs}
     if emails:
         found["emails"] = _merge(supplier.get("emails", []), emails)
     if phones:
         found["phones"] = _merge(supplier.get("phones", []), phones)
+    if about:
+        found["about"] = about
 
+    found.update(_requisites(text))
+    for part in (_moq(text), _price(text), _years(text)):
+        if part:
+            found.update(part)
+    for field, value in (("delivery", _delivery(text)), ("geo", _geo(text))):
+        if value:
+            found[field] = value
+
+    found["haystack"] = _haystack({**supplier, **found}, certs, found)
+    found["confirmed"] = _confirms(supplier, text.lower(), emails, phones)
+    return found
+
+
+def _requisites(text: str) -> dict:
+    found = {}
     inn = INN.search(text)
     if inn:
         found["inn"] = inn.group(1)
     ogrn = OGRN.search(text)
     if ogrn:
         found["ogrn"] = ogrn.group(1)
-
-    moq = _moq(text)
-    if moq:
-        found.update(moq)
-
-    price = _price(text)
-    if price:
-        found.update(price)
-
-    delivery = _delivery(text)
-    if delivery:
-        found["delivery"] = delivery
-
-    geo = _geo(text)
-    if geo:
-        found["geo"] = geo
-
-    years = _years(text)
-    if years:
-        found.update(years)
-
-    if about:
-        found["about"] = about
-
-    merged = {**supplier, **found}
-    merged["haystack"] = " ".join(
-        [haystack(merged), " ".join(certs), found.get("about", ""), found.get("geo", "")]
-    ).lower()[:2000]
-    found["haystack"] = merged["haystack"]
-    found["confirmed"] = _confirms(supplier, lowered, emails, phones)
     return found
+
+
+def _haystack(merged: dict, certs: list[str], found: dict) -> str:
+    parts = [haystack(merged), " ".join(certs), found.get("about", ""), found.get("geo", "")]
+    return " ".join(parts).lower()[:2000]
 
 
 def _relevant(supplier: dict, lowered: str) -> bool:
@@ -391,12 +376,11 @@ def _years(text: str) -> dict | None:
     founded = FOUNDED.search(text)
     if founded:
         year = int(founded.group(1))
-        age = 2026 - year
-        return {"founded": year, "years": f"{age} {_plural(age)} (с {year})"}
+        return {"founded": year, "years": domain.years_text(year)}
     on_market = YEARS_ON_MARKET.search(text)
     if on_market:
         age = int(on_market.group(1))
-        return {"years": f"{age} {_plural(age)}"}
+        return {"years": f"{age} {domain.plural(age, 'год', 'года', 'лет')}"}
     return None
 
 

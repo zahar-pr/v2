@@ -1,6 +1,7 @@
 import ast
 import os
 import pathlib
+import subprocess
 import sys
 import time
 
@@ -18,6 +19,7 @@ import domain
 import index
 import main
 import scoring
+import store
 from fastapi.testclient import TestClient
 from sources import egrul, fns, wikidata, zoon
 
@@ -95,8 +97,8 @@ rows = [
     ),
     row(id="d", name="Тихий Цех", distance_km=8.0),
 ]
-db.save_indexed(rows)
-db.save_enrichment(
+store.save_indexed(rows)
+store.save_enrichment(
     "a",
     {
         "certs": ["Декларация ТР ТС", "ХАССП"],
@@ -119,12 +121,23 @@ db.save_enrichment(
         "about": "Хлебобулочная продукция",
     },
 )
-db.set_verified("a", True, "контакты подтверждены на сайте поставщика")
-db.save_enrichment("c", {"delivery": "ТК по России", "geo": "Вся Россия"})
-for item in db.unscored(50):
+store.set_verified("a", True, "контакты подтверждены на сайте поставщика")
+store.save_enrichment("c", {"delivery": "ТК по России", "geo": "Вся Россия"})
+for item in store.unscored(50):
     index.score_one(item)
 
 client = TestClient(main.app)
+
+flakes = subprocess.run(
+    [sys.executable, "-m", "pyflakes", str(ROOT / "backend")],
+    capture_output=True,
+    text=True,
+)
+if flakes.returncode in (0, 1):
+    report = flakes.stdout.strip()
+    check("бэкенд без неиспользуемого и неопределённого", not report, report.splitlines()[:4])
+else:
+    print("SKIP pyflakes не установлен")
 
 missing = []
 for source in sorted((ROOT / "backend").rglob("*.py")):
@@ -287,11 +300,11 @@ check(
 )
 check("свой удаляется", client.delete(f"/api/comments/{posted['id']}").status_code == 200)
 
-db.save_enrichment(
+store.save_enrichment(
     "a",
     {"rating": 4.6, "reviews": 12, "reviews_source": "Zoon", "reviews_url": "https://zoon.ru/x/"},
 )
-for item in db.unscored(50):
+for item in store.unscored(50):
     index.score_one(item)
 with_reviews = client.get("/api/suppliers").json()["items"][0]
 check("оценка справочника в карточке", with_reviews["reviewsSource"] == "Zoon")

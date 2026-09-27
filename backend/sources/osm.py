@@ -132,58 +132,17 @@ def _many(tags: dict, *names: str) -> list[str]:
 def _to_record(element: dict, city: City, source_title: str) -> dict | None:
     tags = element.get("tags") or {}
     name = _tag(tags, "name", "operator", "brand")
-    if not name or not is_food_related(name):
-        return None
-
     cats = catalog.categories_for(tags)
-    if not cats:
+    if not name or not cats or not is_food_related(name) or not _looks_like_food(tags, name):
         return None
 
-    matched = {
-        (key, value) for key, value in tags.items() if (key, value) in catalog.TAG_CATEGORIES
-    }
-    if matched and matched <= GENERIC_TAGS:
-        about = " ".join(
-            filter(
-                None,
-                (
-                    name,
-                    tags.get("brand", ""),
-                    tags.get("description", ""),
-                    tags.get("wholesale", ""),
-                    tags.get("shop", ""),
-                ),
-            )
-        )
-        if not looks_food(about):
-            return None
-
-    website = _tag(tags, "website", "contact:website", "url")
-    if website and not website.startswith("http"):
-        website = "https://" + website
-    kind_key = next(
-        (
-            key
-            for key in ("craft", "industrial", "man_made", "shop", "wholesale", "office")
-            if tags.get(key)
-        ),
-        "",
-    )
-    kind_tag = tags.get(kind_key, "")
-    kind_pair = f"{kind_key}={kind_tag}" if kind_key else ""
+    kind_key, kind_value = _kind(tags)
+    kind_pair = f"{kind_key}={kind_value}" if kind_key else ""
     kind_class = classify(kind_pair, name)
-    socials = _socials(tags)
     osm_id = f"{element['type']}/{element['id']}"
-    address = ", ".join(
-        part
-        for part in (
-            _tag(tags, "addr:city") or city.name,
-            _tag(tags, "addr:street"),
-            _tag(tags, "addr:housenumber"),
-        )
-        if part
-    )
+    url = f"https://www.openstreetmap.org/{osm_id}"
     center = element.get("center") or {}
+
     record = {
         "id": f"osm:{osm_id}",
         "name": name,
@@ -192,28 +151,66 @@ def _to_record(element: dict, city: City, source_title: str) -> dict | None:
         "region": city.region,
         "cats": "," + ",".join(cats) + ",",
         "cats_titles": [catalog.title(item) for item in cats],
-        "kind": catalog.KIND_TITLES.get(kind_tag, kind_tag or catalog.UNKNOWN_KIND),
+        "kind": catalog.KIND_TITLES.get(kind_value, kind_value or catalog.UNKNOWN_KIND),
         "kind_tag": kind_pair,
         "kind_class": kind_class,
-        "address": address,
+        "address": _address(tags, city),
         "phones": _many(tags, "phone", "contact:phone", "contact:mobile"),
         "emails": _many(tags, "email", "contact:email"),
-        "socials": socials,
-        "website": website,
+        "socials": _socials(tags),
+        "website": _website(tags),
         "hours": _tag(tags, "opening_hours"),
         "wholesale": kind_class in ("producer", "wholesale"),
         "branches": 1,
         "lat": element.get("lat") or center.get("lat"),
         "lon": element.get("lon") or center.get("lon"),
-        "source": f"https://www.openstreetmap.org/{osm_id}",
+        "source": url,
         "source_title": source_title,
-        "sources": [
-            {
-                "id": "osm",
-                "title": source_title,
-                "url": f"https://www.openstreetmap.org/{osm_id}",
-            }
-        ],
+        "sources": [{"id": "osm", "title": source_title, "url": url}],
     }
     record["haystack"] = haystack(record)
     return record
+
+
+def _looks_like_food(tags: dict, name: str) -> bool:
+    matched = {
+        (key, value) for key, value in tags.items() if (key, value) in catalog.TAG_CATEGORIES
+    }
+    if not matched or not matched <= GENERIC_TAGS:
+        return True
+
+    about = " ".join(
+        part
+        for part in (
+            name,
+            tags.get("brand", ""),
+            tags.get("description", ""),
+            tags.get("wholesale", ""),
+            tags.get("shop", ""),
+        )
+        if part
+    )
+    return looks_food(about)
+
+
+def _kind(tags: dict) -> tuple[str, str]:
+    for key in ("craft", "industrial", "man_made", "shop", "wholesale", "office"):
+        if tags.get(key):
+            return key, tags[key]
+    return "", ""
+
+
+def _website(tags: dict) -> str:
+    found = _tag(tags, "website", "contact:website", "url")
+    if found and not found.startswith("http"):
+        return "https://" + found
+    return found
+
+
+def _address(tags: dict, city: City) -> str:
+    parts = (
+        _tag(tags, "addr:city") or city.name,
+        _tag(tags, "addr:street"),
+        _tag(tags, "addr:housenumber"),
+    )
+    return ", ".join(part for part in parts if part)

@@ -120,46 +120,68 @@ def card(
     rank: int = 0,
     checks: dict | None = None,
 ) -> dict:
+    factors = scoring.evaluate(scoring.with_age(row))
+    score = scoring.total(factors, weights)
+    level, verdict = scoring.verdict_of(score)
+
+    return {
+        "id": row["id"],
+        "rank": rank,
+        "score": score,
+        "level": level,
+        "verdict": verdict,
+        "factors": _factors(factors, weights),
+        "ask": [question for factor in scoring.FACTORS for question in factors[factor.id]["ask"]],
+        **_about(row),
+        **_commerce(row),
+        **_legal(row),
+        **_contacts(row),
+        **_trust(row),
+        **_team(row, notes, statuses, checks or {}),
+    }
+
+
+def _factors(factors: dict, weights: dict) -> list[dict]:
+    return [
+        {
+            "id": factor.id,
+            "title": factor.title,
+            "hint": factor.hint,
+            "score": factors[factor.id]["score"],
+            "weight": weights.get(factor.id, 0),
+            "plus": factors[factor.id]["plus"],
+            "minus": factors[factor.id]["minus"],
+            "ask": factors[factor.id]["ask"],
+        }
+        for factor in scoring.FACTORS
+    ]
+
+
+def _about(row: dict) -> dict:
     cats = [catalog.title(item) for item in row["cats"].split(",") if item]
     kind = row.get("kind", "")
     if kind and kind != catalog.UNKNOWN_KIND and kind not in cats and len(kind) <= KIND_LIMIT:
         cats.append(kind)
 
-    factors = scoring.evaluate(scoring.with_age(row))
-    score = scoring.total(factors, weights)
-    level, verdict = scoring.verdict_of(score)
     kind_class = row.get("kind_class") or "unknown"
-
     return {
-        "id": row["id"],
-        "rank": rank,
         "name": row["name"],
         "city": row["city"],
+        "area": row.get("area", ""),
         "region": row["region"],
         "cats": cats,
-        "kind": row.get("kind", ""),
+        "kind": kind,
         "type": kind_class,
         "typeTitle": domain.type_title(kind_class),
-        "score": score,
-        "level": level,
-        "verdict": verdict,
-        "factors": [
-            {
-                "id": factor.id,
-                "title": factor.title,
-                "hint": factor.hint,
-                "score": factors[factor.id]["score"],
-                "weight": weights.get(factor.id, 0),
-                "plus": factors[factor.id]["plus"],
-                "minus": factors[factor.id]["minus"],
-                "ask": factors[factor.id]["ask"],
-            }
-            for factor in scoring.FACTORS
-        ],
-        "ask": [question for factor in scoring.FACTORS for question in factors[factor.id]["ask"]],
-        "rating": row.get("rating"),
-        "reviews": row.get("reviews"),
-        "sourcesCount": len(row.get("sources") or []),
+        "about": row.get("about", ""),
+        "address": row.get("address", ""),
+        "distanceKm": row.get("distance_km"),
+        "branches": row.get("branches", 1),
+    }
+
+
+def _commerce(row: dict) -> dict:
+    return {
         "moq": row.get("moq", ""),
         "moqValue": row.get("moq_value"),
         "price": row.get("price", ""),
@@ -167,14 +189,31 @@ def card(
         "delivery": row.get("delivery", ""),
         "ownDelivery": bool(row.get("own_delivery")),
         "geo": row.get("geo", ""),
-        "distanceKm": row.get("distance_km"),
+        "hours": row.get("hours", ""),
+        "wholesale": bool(row.get("wholesale")),
+        "certs": row.get("certs") or [],
+    }
+
+
+def _legal(row: dict) -> dict:
+    return {
+        "inn": row.get("inn", ""),
+        "ogrn": row.get("ogrn", ""),
+        "okved": row.get("okved", ""),
+        "okvedName": row.get("okved_name", ""),
+        "legalName": row.get("legal_name", ""),
+        "legalHead": row.get("manager", ""),
+        "legalStatus": row.get("legal_status", ""),
+        "legalActive": bool(row.get("legal_active")),
+        "legalClosed": not bool(row.get("legal_active")) and bool(row.get("legal_status")),
         "years": row.get("years", ""),
         "founded": row.get("founded"),
-        "verified": bool(row.get("verified")),
-        "verifiedBy": row.get("verified_by", ""),
-        "certs": row.get("certs") or [],
         "manager": row.get("manager", ""),
-        "about": row.get("about", ""),
+    }
+
+
+def _contacts(row: dict) -> dict:
+    return {
         "phone": (row.get("phones") or [""])[0],
         "email": (row.get("emails") or [""])[0],
         "site": _domain(row.get("website", "")),
@@ -182,35 +221,38 @@ def card(
         "emails": row.get("emails") or [],
         "socials": row.get("socials") or [],
         "checkLinks": _check_links(row),
-        "address": row.get("address", ""),
-        "hours": row.get("hours", ""),
-        "wholesale": bool(row.get("wholesale")),
-        "branches": row.get("branches", 1),
-        "inn": row.get("inn", ""),
-        "ogrn": row.get("ogrn", ""),
-        "area": row.get("area", ""),
-        "okved": row.get("okved", ""),
-        "okvedName": row.get("okved_name", ""),
-        "legalStatus": row.get("legal_status", ""),
-        "legalActive": bool(row.get("legal_active")),
-        "reviewLinks": _review_links(row),
+    }
+
+
+def _trust(row: dict) -> dict:
+    return {
+        "rating": row.get("rating"),
+        "reviews": row.get("reviews"),
         "reviewsUrl": row.get("reviews_url", ""),
         "reviewsSource": row.get("reviews_source", ""),
-        "commentsCount": row.get("comments_count", 0) or 0,
-        "commentsRating": row.get("comments_rating"),
-        "legalName": row.get("legal_name", ""),
-        "legalHead": row.get("manager", ""),
-        "legalClosed": not bool(row.get("legal_active")) and bool(row.get("legal_status")),
+        "reviewLinks": _review_links(row),
+        "verified": bool(row.get("verified")),
+        "verifiedBy": row.get("verified_by", ""),
+        "sourcesCount": len(row.get("sources") or []),
+        "sources": row.get("sources") or [],
         "source": row.get("source", ""),
         "sourceTitle": row.get("source_title", ""),
-        "sources": row.get("sources") or [],
         "checkedAt": row.get("checked_at") or row.get("updated_at") or 0,
-        "note": (notes.get(row["id"]) or {}).get("text", ""),
-        "noteAuthor": (notes.get(row["id"]) or {}).get("author", ""),
-        "status": (statuses.get(row["id"]) or {}).get("status", "new"),
-        "statusAuthor": (statuses.get(row["id"]) or {}).get("author", ""),
-        "statusDays": _days_since((statuses.get(row["id"]) or {}).get("updated_at")),
-        "checksDone": (checks or {}).get(row["id"], []),
+    }
+
+
+def _team(row: dict, notes: dict, statuses: dict, checks: dict) -> dict:
+    note = notes.get(row["id"]) or {}
+    status = statuses.get(row["id"]) or {}
+    return {
+        "note": note.get("text", ""),
+        "noteAuthor": note.get("author", ""),
+        "status": status.get("status", "new"),
+        "statusAuthor": status.get("author", ""),
+        "statusDays": _days_since(status.get("updated_at")),
+        "checksDone": checks.get(row["id"], []),
+        "commentsCount": row.get("comments_count", 0) or 0,
+        "commentsRating": row.get("comments_rating"),
     }
 
 

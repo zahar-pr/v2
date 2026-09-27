@@ -143,283 +143,266 @@ def total(scores: dict, weights: dict) -> int:
 
 
 def verdict_of(score: int) -> tuple[str, str]:
-    level, text = next((level, text) for limit, level, text in VERDICTS if score >= limit)
-    return level, text
+    return next((level, text) for limit, level, text in VERDICTS if score >= limit)
 
 
-def _box(points: int, plus: list, minus: list, ask: list) -> dict:
-    return {
-        "score": max(0, min(100, points)),
-        "plus": plus,
-        "minus": minus,
-        "ask": ask,
-    }
+class Tally:
+    def __init__(self):
+        self.points = 0
+        self.strengths: list[str] = []
+        self.gaps: list[str] = []
+        self.questions: list[str] = []
+
+    def add(self, points: int, strength: str = "") -> "Tally":
+        self.points += points
+        if strength:
+            self.strengths.append(strength)
+        return self
+
+    def lack(self, gap: str, question: str = "") -> "Tally":
+        self.gaps.append(gap)
+        if question:
+            self.questions.append(question)
+        return self
+
+    def ask(self, question: str) -> "Tally":
+        self.questions.append(question)
+        return self
+
+    def box(self) -> dict:
+        return {
+            "score": max(0, min(100, self.points)),
+            "plus": self.strengths,
+            "minus": self.gaps,
+            "ask": self.questions,
+        }
 
 
 def _reputation(s: dict) -> dict:
-    points, plus, minus, ask = 0, [], [], []
+    tally = Tally()
+    _rate_reviews(tally, s)
+    _rate_team(tally, s)
+    _rate_registry(tally, s)
+    return tally.box()
 
+
+def _rate_reviews(tally: Tally, s: dict) -> None:
     rating = s.get("rating") if s.get("reviews_source") else None
-    reviews = s.get("reviews")
-    if rating:
-        where = s.get("reviews_source") or "справочник"
-        counted = f" по {reviews} отзывам" if reviews else ""
-        if rating >= 4.5:
-            points += 25
-            plus.append(f"оценка {rating} из 5 на {where}{counted}")
-        elif rating >= 4:
-            points += 20
-            plus.append(f"оценка {rating} из 5 на {where}{counted}")
-        elif rating >= 3.5:
-            points += 12
-            plus.append(f"средняя оценка {rating} из 5 на {where}{counted}")
-        else:
-            minus.append(f"низкая оценка {rating} из 5 на {where}{counted}")
-            ask.append("Прочитать отзывы: оценка ниже тройки")
-    else:
-        minus.append("оценок в справочниках отзывов не нашлось")
-        ask.append("Посмотреть отзывы по ссылкам в карточке")
+    if not rating:
+        tally.lack(
+            "оценок в справочниках отзывов не нашлось", "Посмотреть отзывы по ссылкам в карточке"
+        )
+        return
 
-    team = s.get("comments_count") or 0
-    team_rating = s.get("comments_rating")
-    if team_rating:
-        word = domain.plural(team, "комментарий", "комментария", "комментариев")
-        plus.append(f"коллеги оценили на {team_rating} из 5 ({team} {word})")
-        if team_rating >= 4:
-            points += 25
-        elif team_rating >= 3:
-            points += 15
-        else:
-            minus.append(f"низкая оценка команды: {team_rating} из 5")
-    elif team:
-        points += 8
-        word = domain.plural(team, "комментарий", "комментария", "комментариев")
-        plus.append(f"{team} {word} от команды")
+    where = s.get("reviews_source") or "справочник"
+    counted = f" по {s['reviews']} отзывам" if s.get("reviews") else ""
+    if rating >= 4.5:
+        tally.add(25, f"оценка {rating} из 5 на {where}{counted}")
+    elif rating >= 4:
+        tally.add(20, f"оценка {rating} из 5 на {where}{counted}")
+    elif rating >= 3.5:
+        tally.add(12, f"средняя оценка {rating} из 5 на {where}{counted}")
     else:
-        minus.append("команда ещё не оставляла комментариев")
-        ask.append("Записать вывод в комментарий после звонка")
+        tally.lack(
+            f"низкая оценка {rating} из 5 на {where}{counted}",
+            "Прочитать отзывы: оценка ниже тройки",
+        )
 
+
+def _rate_team(tally: Tally, s: dict) -> None:
+    count = s.get("comments_count") or 0
+    rating = s.get("comments_rating")
+    if not count:
+        tally.lack(
+            "команда ещё не оставляла комментариев", "Записать вывод в комментарий после звонка"
+        )
+        return
+
+    word = domain.plural(count, "комментарий", "комментария", "комментариев")
+    if not rating:
+        tally.add(8, f"{count} {word} от команды")
+    elif rating >= 4:
+        tally.add(25, f"коллеги оценили на {rating} из 5 ({count} {word})")
+    elif rating >= 3:
+        tally.add(15, f"коллеги оценили на {rating} из 5 ({count} {word})")
+    else:
+        tally.add(0, f"коллеги оценили на {rating} из 5 ({count} {word})")
+        tally.lack(f"низкая оценка команды: {rating} из 5")
+
+
+def _rate_registry(tally: Tally, s: dict) -> None:
     status = s.get("legal_status") or ""
     if s.get("legal_active"):
-        points += 20
-        plus.append(status.lower() if status else "действующее юрлицо по данным ФНС")
+        tally.add(20, status.lower() if status else "действующее юрлицо по данным ФНС")
     elif status:
-        minus.append(f"статус в ФНС: {status.lower()}")
-        ask.append("Проверить, действует ли юрлицо")
+        tally.lack(f"статус в ФНС: {status.lower()}", "Проверить, действует ли юрлицо")
     else:
-        minus.append("юрлицо не найдено в реестрах ФНС")
+        tally.lack("юрлицо не найдено в реестрах ФНС")
 
     founded = s.get("founded")
-    if founded:
-        age = max(0, domain.CURRENT_YEAR - int(founded))
-        if age >= 10:
-            points += 20
-        elif age >= 5:
-            points += 15
-        elif age >= 2:
-            points += 8
-        if age >= 2:
-            plus.append(f"на рынке {age} {domain.plural(age, 'год', 'года', 'лет')}")
-        else:
-            minus.append("компания зарегистрирована меньше двух лет назад")
+    if not founded:
+        tally.lack("дата регистрации неизвестна")
     else:
-        minus.append("дата регистрации неизвестна")
+        age = max(0, domain.CURRENT_YEAR - int(founded))
+        years = f"на рынке {age} {domain.plural(age, 'год', 'года', 'лет')}"
+        if age >= 10:
+            tally.add(20, years)
+        elif age >= 5:
+            tally.add(15, years)
+        elif age >= 2:
+            tally.add(8, years)
+        else:
+            tally.lack("компания зарегистрирована меньше двух лет назад")
 
     okved = s.get("okved") or ""
     if okved:
-        points += 10
         name = (s.get("okved_name") or "").strip()
-        plus.append(f"ОКВЭД {okved}: {name[:70]}" if name else f"ОКВЭД {okved}")
-
-    return _box(points, plus, minus, ask)
+        tally.add(10, f"ОКВЭД {okved}: {name[:70]}" if name else f"ОКВЭД {okved}")
 
 
 def _reach(s: dict) -> dict:
-    points, plus, minus, ask = 0, [], [], []
+    tally = Tally()
     phones = s.get("phones") or []
     if phones:
-        points += 45
-        plus.append(
-            f"телефон: {phones[0]}"
-            if len(phones) == 1
-            else f"{len(phones)} {domain.plural(len(phones), 'телефон', 'телефона', 'телефонов')}"
-        )
-        if len(phones) > 1:
-            points += 5
+        word = domain.plural(len(phones), "телефон", "телефона", "телефонов")
+        text = f"телефон: {phones[0]}" if len(phones) == 1 else f"{len(phones)} {word}"
+        tally.add(45 + (5 if len(phones) > 1 else 0), text)
     else:
-        minus.append("телефона нет ни в одном источнике")
-        ask.append("Найти телефон отдела продаж")
+        tally.lack("телефона нет ни в одном источнике", "Найти телефон отдела продаж")
 
     if s.get("emails"):
-        points += 25
-        plus.append("есть почта для запроса КП")
+        tally.add(25, "есть почта для запроса КП")
     else:
-        minus.append("нет почты")
-        ask.append("Спросить почту для коммерческого предложения")
+        tally.lack("нет почты", "Спросить почту для коммерческого предложения")
 
-    if s.get("website"):
-        points += 15
-        plus.append("есть сайт")
-    else:
-        minus.append("нет сайта")
-
+    tally.add(15, "есть сайт") if s.get("website") else tally.lack("нет сайта")
     if s.get("hours"):
-        points += 10
-        plus.append("известны часы работы")
+        tally.add(10, "известны часы работы")
     else:
-        minus.append("часы работы неизвестны")
+        tally.lack("часы работы неизвестны")
 
     socials = s.get("socials") or []
     if socials:
-        points += 10
-        plus.append("есть соцсети: " + ", ".join(item["title"] for item in socials[:2]))
-
+        tally.add(10, "есть соцсети: " + ", ".join(item["title"] for item in socials[:2]))
     if not phones and not s.get("emails"):
-        ask.append("Найти контакты вручную по ссылкам ниже")
-
-    return _box(points, plus, minus, ask)
+        tally.ask("Найти контакты вручную по ссылкам ниже")
+    return tally.box()
 
 
 def _volume(s: dict) -> dict:
-    points, plus, minus, ask = 0, [], [], []
-    kind_class = s.get("kind_class") or "unknown"
-    if kind_class == "producer":
-        points += 40
-        plus.append("собственное производство")
-    elif kind_class == "wholesale":
-        points += 35
-        plus.append("оптовая база или дистрибьютор")
-    elif kind_class == "retail":
-        minus.append("розничная точка, опт под вопросом")
-        ask.append("Спросить, отгружают ли оптом и работают ли с юрлицами")
+    tally = Tally()
+    kind = s.get("kind_class") or "unknown"
+    if kind == "producer":
+        tally.add(40, "собственное производство")
+    elif kind == "wholesale":
+        tally.add(35, "оптовая база или дистрибьютор")
+    elif kind == "retail":
+        tally.lack(
+            "розничная точка, опт под вопросом",
+            "Спросить, отгружают ли оптом и работают ли с юрлицами",
+        )
     else:
-        points += 10
-        minus.append("тип поставщика не определён")
-        ask.append("Уточнить, производство это или перепродажа")
+        tally.add(10).lack(
+            "тип поставщика не определён", "Уточнить, производство это или перепродажа"
+        )
 
     moq = s.get("moq")
     if moq:
-        points += 25
-        plus.append(f"минимальный заказ: {moq}")
+        tally.add(25, f"минимальный заказ: {moq}")
         if (s.get("moq_value") or 0) and s["moq_value"] <= LOW_MOQ_KG:
-            points += 10
-            plus.append("низкий порог входа")
+            tally.add(10, "низкий порог входа")
     else:
-        minus.append("минимальный заказ неизвестен")
-        ask.append("Уточнить минимальный заказ")
+        tally.lack("минимальный заказ неизвестен", "Уточнить минимальный заказ")
 
     if s.get("price_list"):
-        points += 20
-        plus.append("на сайте есть прайс-лист")
+        tally.add(20, "на сайте есть прайс-лист")
     elif s.get("price"):
-        points += 15
-        plus.append(f"цены: {s['price']}")
+        tally.add(15, f"цены: {s['price']}")
     else:
-        minus.append("цен нет в открытых источниках")
-        ask.append("Запросить прайс")
+        tally.lack("цен нет в открытых источниках", "Запросить прайс")
 
     branches = s.get("branches", 1)
     if branches > 1:
-        points += 10
-        plus.append(f"{branches} {domain.plural(branches, 'точка', 'точки', 'точек')} в городе")
-
-    return _box(points, plus, minus, ask)
+        word = domain.plural(branches, "точка", "точки", "точек")
+        tally.add(10, f"{branches} {word} в городе")
+    return tally.box()
 
 
 def _docs(s: dict) -> dict:
-    points, plus, minus, ask = 0, [], [], []
+    tally = Tally()
     certs = s.get("certs") or []
     if certs:
-        points += min(45, 15 * len(certs))
-        plus.append("документы: " + ", ".join(certs[:3]))
+        tally.add(min(45, 15 * len(certs)), "документы: " + ", ".join(certs[:3]))
     else:
-        minus.append("документы не найдены")
-        ask.append("Запросить декларацию ТР ТС и результаты лабораторных проверок")
+        tally.lack(
+            "документы не найдены", "Запросить декларацию ТР ТС и результаты лабораторных проверок"
+        )
 
     if s.get("inn") or s.get("ogrn"):
-        points += 25
-        plus.append("известны реквизиты")
+        tally.add(25, "известны реквизиты")
     else:
-        minus.append("нет ИНН и ОГРН")
-        ask.append("Уточнить ИНН для проверки юрлица")
+        tally.lack("нет ИНН и ОГРН", "Уточнить ИНН для проверки юрлица")
 
     legal = s.get("legal_name")
     if legal:
-        points += 30
-        plus.append(f"юрлицо подтверждено: {legal[:60]}")
+        tally.add(30, f"юрлицо подтверждено: {legal[:60]}")
     else:
-        minus.append("юрлицо не сверено с реестрами")
-
-    return _box(points, plus, minus, ask)
+        tally.lack("юрлицо не сверено с реестрами")
+    return tally.box()
 
 
 def _logistics(s: dict) -> dict:
-    points, plus, minus, ask = 0, [], [], []
+    tally = Tally()
     distance = s.get("distance_km")
     if distance is None:
-        points += 10
-        minus.append("расстояние неизвестно")
+        tally.add(10).lack("расстояние неизвестно")
     elif distance <= NEAR_KM:
-        points += 40
-        plus.append(f"{distance:.0f} км от центра города")
+        tally.add(40, f"{distance:.0f} км от центра города")
     elif distance <= CITY_KM:
-        points += 30
-        plus.append(f"{distance:.0f} км от центра города")
+        tally.add(30, f"{distance:.0f} км от центра города")
     elif distance <= REGION_KM:
-        points += 20
-        plus.append(f"{distance:.0f} км, пригород")
+        tally.add(20, f"{distance:.0f} км, пригород")
     else:
-        points += 10
-        minus.append(f"{distance:.0f} км от центра — далеко")
+        tally.add(10).lack(f"{distance:.0f} км от центра — далеко")
 
     if s.get("delivery"):
-        points += 30
-        plus.append(s["delivery"][:70])
+        tally.add(30, s["delivery"][:70])
     else:
-        minus.append("условия доставки неизвестны")
-        ask.append("Уточнить доставку и сроки")
+        tally.lack("условия доставки неизвестны", "Уточнить доставку и сроки")
 
     if s.get("geo"):
-        points += 20
-        plus.append(f"поставки: {s['geo']}")
+        tally.add(20, f"поставки: {s['geo']}")
     else:
-        minus.append("география поставок неизвестна")
+        tally.lack("география поставок неизвестна")
 
     if s.get("own_delivery"):
-        points += 10
-        plus.append("своя логистика")
-
-    return _box(points, plus, minus, ask)
+        tally.add(10, "своя логистика")
+    return tally.box()
 
 
 def _trust(s: dict) -> dict:
-    points, plus, minus, ask = 0, [], [], []
+    tally = Tally()
     if s.get("verified"):
-        points += 40
-        plus.append(s.get("verified_by") or "контакты подтверждены")
+        tally.add(40, s.get("verified_by") or "контакты подтверждены")
     else:
-        minus.append("контакты не подтверждены вторым источником")
-        ask.append("Сверить контакты при первом звонке")
+        tally.lack(
+            "контакты не подтверждены вторым источником", "Сверить контакты при первом звонке"
+        )
 
     sources = len(s.get("sources") or [])
     if sources >= 3:
-        points += 35
-        plus.append(f"{sources} источника данных")
+        tally.add(35, f"{sources} источника данных")
     elif sources == 2:
-        points += 25
-        plus.append("два источника данных")
+        tally.add(25, "два источника данных")
     else:
-        minus.append("данные только из одного источника")
+        tally.lack("данные только из одного источника")
 
     days = s.get("checked_days_ago")
     if days is not None and days <= FRESH_DAYS:
-        points += 25
-        plus.append("данные свежие")
+        tally.add(25, "данные свежие")
     elif days is not None:
-        minus.append(f"данные не обновлялись {int(days)} дней")
+        tally.lack(f"данные не обновлялись {int(days)} дней")
 
     if s.get("about"):
-        points += 10
-        plus.append("есть описание компании")
-
-    return _box(points, plus, minus, ask)
+        tally.add(10, "есть описание компании")
+    return tally.box()

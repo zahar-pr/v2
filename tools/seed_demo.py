@@ -1,14 +1,14 @@
 import os
 import random
 import sys
-import time
 
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend")
 )
 
-import db
 import index
+import store
+import team
 
 TEAM = (
     ("demo-irina", "Ирина Ковалёва"),
@@ -64,17 +64,17 @@ def pick(rows, count):
 
 def main():
     random.seed(20260919)
-    defaults = db.best_defaults()
-    rows, total, _ = db.search(
+    defaults = store.best_defaults()
+    rows, total, _ = store.search(
         region=defaults["region"],
         category=defaults["category"],
         kinds=("producer", "wholesale", "unknown"),
         per_page=40,
     )
-    extra, _, _ = db.search(only_contacts=True, kinds=("producer", "wholesale"), per_page=60)
+    extra, _, _ = store.search(only_contacts=True, kinds=("producer", "wholesale"), per_page=60)
     wide = []
     for region in ("Москва и область", "Урал", "Сибирь", "Юг России", "Центральная Россия"):
-        found, _, _ = db.search(
+        found, _, _ = store.search(
             region=region, only_contacts=True, kinds=("producer", "wholesale"), per_page=12
         )
         wide.extend(found)
@@ -91,17 +91,17 @@ def main():
         chosen, rest = pick(rest, count)
         for row in chosen:
             user, author = random.choice(TEAM)
-            db.set_status(user, author, row["id"], status)
+            team.set_status(user, author, row["id"], status)
             touched += 1
 
     for row in pool[:3]:
         user, author = random.choice(TEAM)
-        db.set_status(user, author, row["id"], random.choice(("calling", "quoted")))
+        team.set_status(user, author, row["id"], random.choice(("calling", "quoted")))
 
     notes = 0
     for row in random.sample(pool, min(24, len(pool))):
         user, author = random.choice(TEAM)
-        db.save_note(user, author, row["id"], random.choice(NOTES))
+        team.save_note(user, author, row["id"], random.choice(NOTES))
         notes += 1
 
     comments = 0
@@ -120,12 +120,12 @@ def main():
                 text, rating = random.choice(MIXED), random.choice((3, 4))
             else:
                 text, rating = random.choice(BAD), random.choice((2, 3))
-            db.add_comment(user, row["id"], author, text, rating)
+            team.add_comment(user, row["id"], author, text, rating)
             comments += 1
 
     checks = 0
     for row in pool[:28]:
-        fresh = db.get(row["id"])
+        fresh = store.get(row["id"])
         if not fresh:
             continue
         questions = [
@@ -135,16 +135,16 @@ def main():
         ]
         _, author = random.choice(TEAM)
         for question in questions[: random.choice((1, 2, 3))]:
-            db.set_check(row["id"], question, True, author)
+            team.set_check(row["id"], question, True, author)
             checks += 1
 
     for row in pool:
-        fresh = db.get(row["id"])
+        fresh = store.get(row["id"])
         if fresh:
             index.score_one(fresh)
 
     print(f"статусов: {touched}, заметок: {notes}, комментариев: {comments}, отметок: {checks}")
-    print("счётчики по статусам:", db.status_counts())
+    print("счётчики по статусам:", team.status_counts())
 
 
 main()
