@@ -206,6 +206,32 @@ async def api_suppliers(
         preset,
         checks=_checks(rows),
     )
+    if not found:
+        answer["relax"] = db.relax_options(
+            {
+                "query": q,
+                "category": chosen_category,
+                "region": chosen_region,
+                "city": chosen_city,
+                "kinds": _kinds(kinds),
+                "only_docs": onlyDocs,
+                "only_verified": onlyVerified,
+                "only_contacts": onlyContacts,
+                "status": status,
+                "weights": used,
+            },
+            {
+                "only_docs": "Без условия «с документами»",
+                "only_verified": "Без условия «подтверждённые»",
+                "only_contacts": "Вместе с теми, у кого нет контактов",
+                "kinds": "Вместе с розницей",
+                "query": "Без строки поиска",
+                "category": "Все категории",
+                "city": "Весь регион",
+                "region": "Вся страна",
+                "status": "Любой статус",
+            },
+        )
     answer["status"] = payload.status(index.state)
     answer["stats"] = db.stats()
     answer["facets"] = facets
@@ -245,7 +271,7 @@ def api_calllist(
     items = [
         payload.card(row, notes, statuses, used, rank=number + 1)
         for number, row in enumerate(rows)
-        if statuses.get(row["id"], "new") not in ("rejected", "fit")
+        if (statuses.get(row["id"]) or {}).get("status", "new") not in ("rejected", "fit")
     ]
     return {"items": items[:limit], "weights": used, "preset": preset}
 
@@ -372,11 +398,7 @@ def api_set_check(body: CheckIn, owner: str = Depends(user_id)):
 
 @app.get("/api/pipeline")
 def api_pipeline():
-    return {
-        "statuses": db.statuses_of(),
-        "counts": db.status_counts(),
-        "authors": db.status_authors(),
-    }
+    return {"statuses": db.statuses_of(), "counts": db.status_counts()}
 
 
 @app.post("/api/pipeline")

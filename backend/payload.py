@@ -1,5 +1,6 @@
 import csv
 import io
+import time
 from urllib.parse import quote
 
 import catalog
@@ -206,9 +207,17 @@ def card(
         "checkedAt": row.get("checked_at") or row.get("updated_at") or 0,
         "note": (notes.get(row["id"]) or {}).get("text", ""),
         "noteAuthor": (notes.get(row["id"]) or {}).get("author", ""),
-        "status": statuses.get(row["id"], "new"),
+        "status": (statuses.get(row["id"]) or {}).get("status", "new"),
+        "statusAuthor": (statuses.get(row["id"]) or {}).get("author", ""),
+        "statusDays": _days_since((statuses.get(row["id"]) or {}).get("updated_at")),
         "checksDone": (checks or {}).get(row["id"], []),
     }
+
+
+def _days_since(moment) -> int | None:
+    if not moment:
+        return None
+    return max(0, int((time.time() - moment) // 86400))
 
 
 def _review_links(row: dict) -> list[dict]:

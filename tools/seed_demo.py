@@ -3,7 +3,9 @@ import random
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend"))
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend")
+)
 
 import db
 import index
@@ -48,10 +50,10 @@ BAD = (
 )
 
 STATUS_PLAN = (
-    ("fit", 4),
-    ("quoted", 5),
-    ("calling", 7),
-    ("rejected", 3),
+    ("fit", 9),
+    ("quoted", 12),
+    ("calling", 16),
+    ("rejected", 7),
 )
 
 
@@ -69,8 +71,14 @@ def main():
         kinds=("producer", "wholesale", "unknown"),
         per_page=40,
     )
-    extra, _, _ = db.search(only_contacts=True, kinds=("producer", "wholesale"), per_page=25)
-    pool = list({row["id"]: row for row in [*rows, *extra]}.values())
+    extra, _, _ = db.search(only_contacts=True, kinds=("producer", "wholesale"), per_page=60)
+    wide = []
+    for region in ("Москва и область", "Урал", "Сибирь", "Юг России", "Центральная Россия"):
+        found, _, _ = db.search(
+            region=region, only_contacts=True, kinds=("producer", "wholesale"), per_page=12
+        )
+        wide.extend(found)
+    pool = list({row["id"]: row for row in [*rows, *extra, *wide]}.values())
     if not pool:
         print("индекс пуст, наполнять нечего")
         return
@@ -90,13 +98,15 @@ def main():
         user, author = random.choice(TEAM)
         db.set_status(user, author, row["id"], random.choice(("calling", "quoted")))
 
-    for row in pool[:10]:
+    notes = 0
+    for row in random.sample(pool, min(24, len(pool))):
         user, author = random.choice(TEAM)
         db.save_note(user, author, row["id"], random.choice(NOTES))
+        notes += 1
 
     comments = 0
-    for position, row in enumerate(pool[:18]):
-        how_many = 3 if position < 6 else random.choice((1, 2))
+    for position, row in enumerate(pool[:45]):
+        how_many = 3 if position < 14 else random.choice((1, 2, 2))
         used = set()
         for _ in range(how_many):
             user, author = random.choice(TEAM)
@@ -114,7 +124,7 @@ def main():
             comments += 1
 
     checks = 0
-    for row in pool[:12]:
+    for row in pool[:28]:
         fresh = db.get(row["id"])
         if not fresh:
             continue
@@ -133,7 +143,7 @@ def main():
         if fresh:
             index.score_one(fresh)
 
-    print(f"статусов: {touched}, заметок: 10, комментариев: {comments}, отметок: {checks}")
+    print(f"статусов: {touched}, заметок: {notes}, комментариев: {comments}, отметок: {checks}")
     print("счётчики по статусам:", db.status_counts())
 
 

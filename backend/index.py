@@ -17,8 +17,8 @@ ENRICH_PARALLEL = 6
 ENRICH_PAUSE = 4.0
 EGRUL_BATCH = 8
 EGRUL_PAUSE = 6.0
-REVIEWS_BATCH = 10
-REVIEWS_PAUSE = 2.5
+REVIEWS_BATCH = 20
+REVIEWS_PAUSE = 1.5
 FNS_BATCH = 10
 FNS_PAUSE = 3.0
 DISCOVER_PAGES = 3
@@ -480,9 +480,7 @@ def _registry_record(row: dict) -> dict | None:
         "legal_status": row.get("sulst_name_ex") or "",
         "legal_active": 0 if row.get("pr_liq") == "1" else 1,
         "founded": founded,
-        "years": (
-            f"{2026 - founded} {fns._plural(2026 - founded)} (с {founded})" if founded else ""
-        ),
+        "years": (domain.years_text(founded) if founded else ""),
     }
     record["haystack"] = " ".join(
         [domain.haystack(record), okved, record["okved_name"], area, record["legal_name"]]
@@ -588,9 +586,7 @@ def _egrul_record(row: dict, category: str, kind: str) -> dict | None:
         "legal_active": 0 if closed else 1,
         "manager": egrul._head(row.get("g") or ""),
         "founded": founded,
-        "years": (
-            f"{2026 - founded} {egrul._plural(2026 - founded)} (с {founded})" if founded else ""
-        ),
+        "years": (domain.years_text(founded) if founded else ""),
     }
     record["haystack"] = " ".join([domain.haystack(record), area, record["legal_name"]]).lower()[
         :2000
@@ -604,7 +600,7 @@ async def reviews_forever() -> None:
             while True:
                 pending = db.pending_reviews(REVIEWS_BATCH)
                 if not pending:
-                    await asyncio.sleep(180)
+                    await asyncio.sleep(600)
                     continue
                 for supplier in pending:
                     await reviews_one(client, supplier)

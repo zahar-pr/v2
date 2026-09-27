@@ -4,6 +4,7 @@ export default function FiltersPanel({
   meta, preset, cat, kinds, onlyDocs, onlyVerified, onlyContacts,
   facets, onPreset, onExplain,
   onCat, onKind, onDocs, onVerified, onContacts, onReset, anyFilter,
+  total, loading, onApply,
 }) {
   if (!meta) return null;
 
@@ -47,11 +48,11 @@ export default function FiltersPanel({
 
       <div className="fgroup">
         <div className="fgroup__head"><span className="fgroup__title">Категория</span></div>
-        <div className="fgroup__body fgroup__body--row">
+        <div className="fgroup__body fgroup__body--grid">
           {meta.categories.map((c) => (
             <button
               type="button" key={c.id}
-              className={`chip${cat === c.id ? ' chip--on' : ''}`}
+              className={`chip chip--wide${cat === c.id ? ' chip--on' : ''}`}
               onClick={() => onCat(c.id)}
             >
               {c.title}
@@ -81,11 +82,14 @@ export default function FiltersPanel({
         </div>
       </div>
 
-      {anyFilter && (
-        <button type="button" className="btn btn--ghost filters__reset" onClick={onReset}>
-          Сбросить фильтры
+      <div className="filters__foot">
+        {anyFilter && (
+          <button type="button" className="btn btn--ghost" onClick={onReset}>Сбросить</button>
+        )}
+        <button type="button" className="btn btn--cyan" onClick={onApply}>
+          {loading ? 'Считаем…' : `Показать ${total}`}
         </button>
-      )}
+      </div>
     </div>
   );
 }

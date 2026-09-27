@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import StatusPicker from './StatusPicker.jsx';
 import Comments from './Comments.jsx';
 import { setCheck } from '../api/client.js';
-import { checkedAt, dash, placeOf, plural, ratingOf } from '../data/suppliers.js';
+import { ageText, checkedAt, dash, placeOf, plural, quoteLetter, ratingOf } from '../data/suppliers.js';
 
 export default function SupplierPanel({
   supplier, note, statuses, onNote, onStatus, onComment,
@@ -302,6 +302,11 @@ export default function SupplierPanel({
           <div>
             <div className="section-title">Работа с поставщиком</div>
             <StatusPicker value={s.status} statuses={statuses} onChange={onStatus} />
+            {s.status !== 'new' && s.statusAuthor && (
+              <div className="note__status">
+                Статус поставил {s.statusAuthor} {ageText(s.statusDays)}
+              </div>
+            )}
             <textarea
               className="note"
               value={note || ''}
@@ -319,8 +324,17 @@ export default function SupplierPanel({
             {s.phone
               ? <a href={`tel:${tel(s.phone)}`}>Позвонить</a>
               : s.email
-                ? <a href={`mailto:${s.email}`}>Написать</a>
+                ? <a href={quoteLetter(s)}>Запросить КП</a>
                 : <a href={s.source} target="_blank" rel="noreferrer">Открыть источник</a>}
+            {s.email && s.phone && (
+              <a
+                className="btn btn--ghost"
+                href={quoteLetter(s)}
+                onClick={() => { if (s.status === 'new') onStatus('quoted'); }}
+              >
+                Запросить КП
+              </a>
+            )}
             <button
               type="button"
               className={`btn ${inCompare ? 'btn--in' : compareFull ? 'btn--full' : 'btn--ghost'}`}

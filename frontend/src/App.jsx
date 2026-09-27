@@ -50,6 +50,7 @@ export default function App() {
   const [status, setStatusState] = useState(null);
   const [counts, setCounts] = useState({});
   const [facets, setFacets] = useState(null);
+  const [relax, setRelax] = useState([]);
 
   const [menu, setMenu] = useState(null);
   const [selId, setSelId] = useState(null);
@@ -148,6 +149,7 @@ export default function App() {
           setStatusState(answer.status);
           setCounts(answer.pipeline || {});
           setFacets(answer.facets || null);
+          setRelax(answer.relax || []);
           setLoading(false);
           setLoadingMore(false);
           if (!append) preselect(answer.items);
@@ -257,6 +259,24 @@ export default function App() {
     setPreset(id);
     const found = meta.presets.find((p) => p.id === id);
     if (found) setWeights(found.weights);
+  };
+
+  const applyRelax = (item) => {
+    if (!meta) return;
+    (item.keys || [item.key]).forEach(relaxOne);
+  };
+
+  const relaxOne = (key) => {
+    if (!meta) return;
+    if (key === 'only_docs') setOnlyDocs(false);
+    else if (key === 'only_verified') setOnlyVerified(false);
+    else if (key === 'only_contacts') setOnlyContacts(false);
+    else if (key === 'kinds') setKinds(meta.kinds.map((k) => k.id));
+    else if (key === 'query') setQuery('');
+    else if (key === 'category') setCat(meta.labels ? 'all' : 'all');
+    else if (key === 'city') setCity(meta.defaults.city);
+    else if (key === 'region') setRegion(meta.labels.anyRegion);
+    else if (key === 'status') setStatusFilter('');
   };
 
   const changeNote = (supplierId, text) => {
@@ -397,6 +417,8 @@ export default function App() {
               onVerified={() => setOnlyVerified((v) => !v)}
               onContacts={() => setOnlyContacts((v) => !v)}
               onReset={resetAll}
+              total={total} loading={loading}
+              onApply={() => setFiltersOpen(false)}
             />
           </aside>
 
@@ -409,6 +431,27 @@ export default function App() {
                 {loading ? 'Подбираем…' : `Найдено ${total}`}
                 {presetTitle ? <span className="results__preset">{presetTitle}</span> : null}
               </div>
+            </div>
+
+            <div className="tabs">
+              <button
+                type="button"
+                className={`tab${statusFilter === '' ? ' tab--on' : ''}`}
+                onClick={() => setStatusFilter('')}
+              >
+                Все
+              </button>
+              {((meta && meta.statuses) || []).filter((s) => s.id !== 'new').map((s) => (
+                <button
+                  type="button" key={s.id}
+                  className={`tab${statusFilter === s.id ? ' tab--on' : ''}`}
+                  onClick={() => setStatusFilter(statusFilter === s.id ? '' : s.id)}
+                  disabled={!counts[s.id]}
+                >
+                  {s.title}
+                  <span className="tab__count">{counts[s.id] || 0}</span>
+                </button>
+              ))}
             </div>
 
             {!loading && !error && facets && total > 0 && (
@@ -486,9 +529,24 @@ export default function App() {
                 <p>
                   {indexing
                     ? 'Города добавляются по очереди. Выберите город — он проиндексируется сразу.'
-                    : 'Снимите часть фильтров, добавьте тип «Розничная точка» или расширьте регион.'}
+                    : relax.length
+                      ? 'Вот что можно ослабить, чтобы поставщики появились:'
+                      : 'Снимите часть фильтров или расширьте регион.'}
                 </p>
-                <button type="button" className="btn btn--cyan" onClick={resetAll}>Сбросить фильтры</button>
+                {relax.length > 0 && (
+                  <div className="relax">
+                    {relax.map((item) => (
+                      <button
+                        type="button" key={item.key} className="relax__item"
+                        onClick={() => applyRelax(item)}
+                      >
+                        {item.title}
+                        <span className="relax__count">{item.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button type="button" className="btn btn--cyan" onClick={resetAll}>Сбросить всё</button>
               </div>
             )}
           </div>

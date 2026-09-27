@@ -87,3 +87,29 @@ export const COMPARE_ROWS = [
   },
   { label: 'Контакт', get: (s) => [s.phone, s.email].filter(Boolean).join(' · ') || '—' },
 ];
+
+export function ageText(days) {
+  if (days === null || days === undefined) return '';
+  if (days === 0) return 'сегодня';
+  if (days === 1) return 'вчера';
+  return `${days} ${plural(days, 'день', 'дня', 'дней')} назад`;
+}
+
+export function quoteLetter(s) {
+  const subject = `Запрос коммерческого предложения — ${s.name}`;
+  const body = [
+    'Здравствуйте!',
+    '',
+    `Мы ресторан, подбираем поставщика по направлению «${s.cats[0] || 'продукты'}».`,
+    'Пришлите, пожалуйста, коммерческое предложение:',
+    '',
+    '— актуальный прайс;',
+    '— минимальный заказ и условия отгрузки;',
+    '— сроки и стоимость доставки' + (s.city ? ` в ${s.city}` : '') + ';',
+    '— документы на продукцию (декларации, ХАССП);',
+    '— условия оплаты и возможность отсрочки.',
+    '',
+    'Спасибо, ждём ответа.',
+  ].join('\n');
+  return `mailto:${s.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}

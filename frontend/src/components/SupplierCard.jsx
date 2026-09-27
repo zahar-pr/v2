@@ -1,7 +1,7 @@
 import React from 'react';
 import FactorStrip from './FactorStrip.jsx';
 import StatusPicker from './StatusPicker.jsx';
-import { placeOf, plural, ratingOf, statusTitle, strongest, weakest } from '../data/suppliers.js';
+import { ageText, placeOf, plural, ratingOf, statusTitle, strongest, weakest } from '../data/suppliers.js';
 
 export default function SupplierCard({
   supplier, index, statuses, inCompare, compareFull, onOpen, onCompare, onStatus,
@@ -51,7 +51,10 @@ export default function SupplierCard({
         {s.legalActive && <span className="tag tag--ok">действующее юрлицо</span>}
         {s.cats.slice(0, 2).map((c) => <span className="tag tag--cat" key={c}>{c}</span>)}
         {s.status !== 'new' && (
-          <span className={`tag tag--status tag--${s.status}`}>{statusTitle(s.status, statuses)}</span>
+          <span className={`tag tag--status tag--${s.status}`}>
+            {statusTitle(s.status, statuses)}
+            {s.statusDays ? ` · ${s.statusDays} дн` : ''}
+          </span>
         )}
         {s.verified && <span className="tag tag--ok">данные подтверждены</span>}
       </div>

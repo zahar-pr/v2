@@ -1,0 +1,330 @@
+import ast
+import os
+import pathlib
+import sys
+import time
+
+os.environ["DB_PATH"] = "/tmp/provizia-test.db"
+os.environ["PROVIZIA_WORKERS"] = "0"
+os.environ["ADMIN_TOKEN"] = "secret"
+if os.path.exists("/tmp/provizia-test.db"):
+    os.remove("/tmp/provizia-test.db")
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "backend"))
+
+import db
+import domain
+import index
+import main
+import scoring
+from fastapi.testclient import TestClient
+from sources import egrul, fns, wikidata, zoon
+
+ok = []
+
+
+def check(label, condition, extra=""):
+    ok.append(bool(condition))
+    print(("PASS " if condition else "FAIL ") + label + ("" if condition else f"  <- {extra}"))
+
+
+def row(**kw):
+    base = dict(
+        id="",
+        name="",
+        name_key="",
+        city="Казань",
+        region="Поволжье",
+        area="",
+        cats=",bakery,",
+        kind="Хлеб и выпечка",
+        kind_tag="craft=bakery",
+        kind_class="producer",
+        address="Казань",
+        phones=[],
+        emails=[],
+        socials=[],
+        website="",
+        hours="",
+        wholesale=True,
+        branches=1,
+        lat=None,
+        lon=None,
+        source="https://osm.org/x",
+        source_title="OpenStreetMap",
+        sources=[{"id": "osm", "title": "OSM", "url": "u"}],
+        distance_km=None,
+        checked_at=time.time(),
+    )
+    base.update(kw)
+    base["name_key"] = domain.name_key(base["name"])
+    base["haystack"] = domain.haystack(base)
+    return base
+
+
+rows = [
+    row(
+        id="a",
+        name="Хлебозавод Полный",
+        phones=["+7 843 111-11-11", "+7 843 111-11-12"],
+        emails=["opt@zavod.ru"],
+        website="https://zavod.ru",
+        hours="08:00-18:00",
+        distance_km=5.0,
+    ),
+    row(
+        id="b",
+        name="Булочная Розница",
+        phones=["+7 843 222-22-22"],
+        kind_class="retail",
+        kind_tag="shop=bakery",
+        wholesale=False,
+        distance_km=3.0,
+    ),
+    row(
+        id="c",
+        name="Оптбаза Дальняя",
+        phones=["+7 843 333-33-33"],
+        emails=["sale@baza.ru"],
+        website="https://baza.ru",
+        kind_class="wholesale",
+        kind_tag="shop=wholesale",
+        cats=",wholesale,",
+        distance_km=55.0,
+    ),
+    row(id="d", name="Тихий Цех", distance_km=8.0),
+]
+db.save_indexed(rows)
+db.save_enrichment(
+    "a",
+    {
+        "certs": ["Декларация ТР ТС", "ХАССП"],
+        "moq": "от 200 кг",
+        "moq_value": 200.0,
+        "price": "от 190 ₽/кг",
+        "price_list": "https://zavod.ru/price.xlsx",
+        "delivery": "Своя логистика, ежедневно",
+        "own_delivery": 1,
+        "geo": "ПФО",
+        "inn": "1655123456",
+        "legal_name": 'ООО "ХЛЕБОЗАВОД"',
+        "manager": "Иванов И.И. (директор)",
+        "legal_status": "Действующая организация",
+        "legal_active": 1,
+        "okved": "10.71",
+        "okved_name": "Производство хлеба",
+        "years": "22 года (с 2004)",
+        "founded": 2004,
+        "about": "Хлебобулочная продукция",
+    },
+)
+db.set_verified("a", True, "контакты подтверждены на сайте поставщика")
+db.save_enrichment("c", {"delivery": "ТК по России", "geo": "Вся Россия"})
+for item in db.unscored(50):
+    index.score_one(item)
+
+client = TestClient(main.app)
+
+missing = []
+for source in sorted((ROOT / "backend").rglob("*.py")):
+    for node in ast.walk(ast.parse(source.read_text())):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            module = sys.modules.get(node.value.id)
+            known = (
+                "db",
+                "catalog",
+                "scoring",
+                "domain",
+                "payload",
+                "index",
+                "egrul",
+                "fns",
+                "zoon",
+                "wikidata",
+            )
+            if node.value.id in known:
+                target = module or sys.modules.get(f"sources.{node.value.id}")
+                if target and not hasattr(target, node.attr):
+                    missing.append(f"{source.name}: {node.value.id}.{node.attr}")
+check("модули не зовут несуществующие функции", not missing, missing[:4])
+
+meta = client.get("/api/meta").json()
+check("мета: 6 факторов", len(meta["factors"]) == 6, [f["id"] for f in meta["factors"]])
+check("мета: фактор репутации", any(f["id"] == "reputation" for f in meta["factors"]))
+check("мета: 6 пресетов", len(meta["presets"]) == 6)
+check("веса пресетов дают 100", all(sum(p["weights"].values()) == 100 for p in meta["presets"]))
+check(
+    "веса не поровну",
+    len({*meta["presets"][0]["weights"].values()}) > 3,
+    meta["presets"][0]["weights"],
+)
+check(
+    "мета: типы",
+    {k["id"] for k in meta["kinds"]} == {"producer", "wholesale", "retail", "unknown"},
+)
+check(
+    "мета: статусы",
+    {s["id"] for s in meta["statuses"]} == {"new", "calling", "quoted", "fit", "rejected"},
+)
+check("мета: по умолчанию без розницы", "retail" not in meta["defaults"]["kinds"])
+check("мета: города по регионам", isinstance(meta["cities"], dict) and len(meta["regions"]) >= 9)
+
+base = client.get("/api/suppliers", params={"kinds": "producer,wholesale,unknown"}).json()
+check("фильтр типа прячет розницу", all(i["type"] != "retail" for i in base["items"]))
+check(
+    "полный поставщик первый",
+    base["items"][0]["id"] == "a",
+    [(i["id"], i["score"]) for i in base["items"]],
+)
+card = base["items"][0]
+check("раскладка из 6 факторов", len(card["factors"]) == 6)
+check("у фактора есть вес", card["factors"][0]["weight"] > 0)
+check("есть «что уточнить»", isinstance(card["ask"], list))
+check("тип подписан", card["typeTitle"] == "Производство")
+check("расстояние", card["distanceKm"] == 5.0)
+check("юрлицо", card["legalName"].startswith("ООО"))
+check("руководитель", "Иванов" in card["legalHead"])
+check("ОКВЭД", card["okved"] == "10.71")
+check("статус ФНС", card["legalActive"])
+check("прайс-лист", card["priceList"].endswith(".xlsx"))
+check("ссылки на отзывы", len(card["reviewLinks"]) == 3)
+check("ранг", card["rank"] == 1)
+
+for preset in ("urgent", "docs", "volume", "near", "trusted"):
+    answer = client.get("/api/suppliers", params={"preset": preset}).json()
+    check(
+        f"пресет {preset} отдаёт свои веса",
+        sum(answer["weights"].values()) == 100,
+        answer["weights"],
+    )
+check(
+    "пресеты меняют балл",
+    client.get("/api/suppliers", params={"preset": "near"}).json()["items"][0]["score"]
+    != client.get("/api/suppliers", params={"preset": "docs"}).json()["items"][0]["score"],
+)
+
+check(
+    "фильтр документов",
+    client.get("/api/suppliers", params={"onlyDocs": "true"}).json()["total"] == 1,
+)
+check(
+    "фильтр контактов",
+    client.get("/api/suppliers", params={"onlyContacts": "true"}).json()["total"] == 3,
+)
+check(
+    "поиск по строке", client.get("/api/suppliers", params={"q": "оптбаза"}).json()["total"] == 1
+)
+check(
+    "сортировка по расстоянию",
+    client.get("/api/suppliers", params={"sort": "По расстоянию"}).json()["items"][0]["id"] == "b",
+)
+paged = client.get("/api/suppliers", params={"perPage": 2, "page": 2}).json()
+check("пагинация", paged["page"] == 2 and paged["pages"] == 2)
+check("фасеты", client.get("/api/suppliers").json()["facets"]["types"]["producer"] == 2)
+
+empty = client.get("/api/suppliers", params={"onlyDocs": "true", "q": "несуществующее"}).json()
+check(
+    "пустая выдача подсказывает, что снять",
+    empty["total"] == 0 and len(empty.get("relax", [])) > 0,
+    empty.get("relax"),
+)
+
+client.post("/api/profile", json={"name": "Захар"})
+check("профиль сохранён", client.get("/api/profile").json()["name"] == "Захар")
+saved = client.post("/api/pipeline", json={"supplierId": "c", "status": "rejected"}).json()
+check("статус сохранён", saved["status"] == "rejected" and saved["counts"]["rejected"] == 1)
+other = TestClient(main.app)
+seen = other.get("/api/suppliers").json()["items"]
+check("статус виден команде", any(i["id"] == "c" and i["status"] == "rejected" for i in seen))
+check("автор статуса", next(i for i in seen if i["id"] == "c")["statusAuthor"] == "Захар")
+check("возраст статуса", next(i for i in seen if i["id"] == "c")["statusDays"] == 0)
+check(
+    "фильтр по статусу",
+    client.get("/api/suppliers", params={"status": "rejected"}).json()["total"] == 1,
+)
+
+client.post("/api/notes", json={"supplierId": "a", "text": "Ждём КП до 25.09"})
+team = other.get("/api/suppliers").json()["items"][0]
+check("заметка видна команде", team["note"] == "Ждём КП до 25.09")
+check("автор заметки", team["noteAuthor"] == "Захар")
+
+client.post("/api/checks", json={"supplierId": "a", "question": "Запросить прайс", "done": True})
+check(
+    "чек-лист командный",
+    "Запросить прайс" in other.get("/api/suppliers").json()["items"][0]["checksDone"],
+)
+
+posted = client.post(
+    "/api/comments", json={"supplierId": "a", "text": "Звонили, МОЗ 500 кг", "rating": 4}
+).json()
+check("комментарий создан", posted["rating"] == 4 and posted["mine"])
+other.post(
+    "/api/comments",
+    json={"supplierId": "a", "text": "Отгрузили в срок", "rating": 5, "author": "Ирина"},
+)
+check("комментарии видны всем", len(client.get("/api/comments/a").json()["items"]) == 2)
+check(
+    "пустой комментарий -> 400",
+    client.post("/api/comments", json={"supplierId": "a", "text": " "}).status_code == 400,
+)
+check(
+    "оценка вне шкалы -> 400",
+    client.post("/api/comments", json={"supplierId": "a", "text": "x", "rating": 9}).status_code
+    == 400,
+)
+fresh = client.get("/api/suppliers").json()["items"][0]
+check("оценка команды в карточке", fresh["commentsRating"] == 4.5 and fresh["commentsCount"] == 2)
+reputation = next(f for f in fresh["factors"] if f["id"] == "reputation")
+check(
+    "оценка команды в балле",
+    any("коллеги оценили" in t for t in reputation["plus"]),
+    reputation["plus"],
+)
+check(
+    "чужой комментарий не удалить",
+    other.delete(f"/api/comments/{posted['id']}").status_code == 404,
+)
+check("свой удаляется", client.delete(f"/api/comments/{posted['id']}").status_code == 200)
+
+db.save_enrichment(
+    "a",
+    {"rating": 4.6, "reviews": 12, "reviews_source": "Zoon", "reviews_url": "https://zoon.ru/x/"},
+)
+for item in db.unscored(50):
+    index.score_one(item)
+with_reviews = client.get("/api/suppliers").json()["items"][0]
+check("оценка справочника в карточке", with_reviews["reviewsSource"] == "Zoon")
+rep_now = next(f for f in with_reviews["factors"] if f["id"] == "reputation")
+check(
+    "отзывы поднимают репутацию",
+    rep_now["score"] > reputation["score"],
+    (reputation["score"], rep_now["score"]),
+)
+
+calls = client.get("/api/calllist").json()
+check("обзвон без отказов", all(i["id"] != "c" for i in calls["items"]))
+check("обзвон только с контактами", all(i["phone"] or i["email"] for i in calls["items"]))
+
+rec = client.post("/api/compare/recommend", json={"ids": ["b", "a", "d"]}).json()
+check("сравнение: лучший", rec["bestId"] == "a", rec.get("bestId"))
+check("сравнение: объяснение", len(rec["diff"]) > 0 and rec["diff"][0]["factor"])
+
+csv_answer = client.get("/api/export.csv")
+check("экспорт CSV", csv_answer.status_code == 200 and "Приоритет" in csv_answer.text[:200])
+check(
+    "админ без токена",
+    client.post("/api/admin/verify", json={"supplierId": "d"}).status_code == 403,
+)
+check(
+    "неизвестная категория -> 400",
+    client.get("/api/suppliers", params={"category": "zzz"}).status_code == 400,
+)
+check(
+    "неизвестный город -> 404",
+    client.get("/api/suppliers", params={"city": "Атлантида"}).status_code == 404,
+)
+
+print()
+print(f"{sum(ok)}/{len(ok)} проверок прошло")
+sys.exit(0 if all(ok) else 1)

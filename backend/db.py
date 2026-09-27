@@ -670,14 +670,17 @@ def save_profile(user_id: str, name: str) -> str:
 
 def statuses_of() -> dict:
     connection = connect()
-    rows = connection.execute("SELECT supplier_id, status FROM pipeline").fetchall()
-    return {row["supplier_id"]: row["status"] for row in rows}
-
-
-def status_authors() -> dict:
-    connection = connect()
-    rows = connection.execute("SELECT supplier_id, author, updated_at FROM pipeline").fetchall()
-    return {row["supplier_id"]: dict(row) for row in rows}
+    rows = connection.execute(
+        "SELECT supplier_id, status, author, updated_at FROM pipeline"
+    ).fetchall()
+    return {
+        row["supplier_id"]: {
+            "status": row["status"],
+            "author": row["author"],
+            "updated_at": row["updated_at"],
+        }
+        for row in rows
+    }
 
 
 def set_status(user_id: str, author: str, supplier_id: str, status: str) -> dict:
@@ -706,12 +709,13 @@ def status_counts() -> dict:
     return {row["status"]: row["n"] for row in rows}
 
 
-def pending_reviews(limit: int) -> list[dict]:
+def pending_reviews(limit: int, recheck_after: float = 30 * 24 * 3600) -> list[dict]:
     connection = connect()
     rows = connection.execute(
-        "SELECT * FROM suppliers WHERE reviews_checked = 0 AND kind_class != 'retail' "
-        "ORDER BY " + KIND_ORDER + ", score DESC LIMIT ?",
-        (limit,),
+        "SELECT * FROM suppliers WHERE kind_class != 'retail' "
+        "AND (reviews_checked = 0 OR (reviews_source = '' AND reviews_checked < ?)) "
+        "ORDER BY reviews_checked ASC, " + KIND_ORDER + ", score DESC LIMIT ?",
+        (time.time() - recheck_after, limit),
     ).fetchall()
     return [row_to_dict(row) for row in rows]
 
@@ -873,6 +877,37 @@ def set_check(supplier_id: str, question: str, done: bool, author: str) -> None:
         connection.commit()
 
 
+def save_center(city: str, lat: float, lon: float) -> None:
+    with _lock:
+        connection = connect()
+        connection.execute(
+            "INSERT INTO centers (city, lat, lon) VALUES (?, ?, ?) "
+            "ON CONFLICT(city) DO UPDATE SET lat=excluded.lat, lon=excluded.lon",
+            (city, lat, lon),
+        )
+        connection.commit()
+
+
+def center_of(city: str) -> tuple[float, float] | None:
+    connection = connect()
+    row = connection.execute("SELECT lat, lon FROM centers WHERE city=?", (city,)).fetchone()
+    return (row["lat"], row["lon"]) if row else None
+
+
+def save_distances(city: str, center: tuple[float, float]) -> int:
+    lat, lon = center
+    with _lock:
+        connection = connect()
+        cursor = connection.execute(
+            "UPDATE suppliers SET distance_km = ROUND("
+            "111.0 * SQRT((lat - ?) * (lat - ?) + (lon - ?) * (lon - ?) * 0.33), 1) "
+            "WHERE city = ? AND lat IS NOT NULL AND lon IS NOT NULL",
+            (lat, lat, lon, lon, city),
+        )
+        connection.commit()
+    return cursor.rowcount
+
+
 def refreshed_at(city: str) -> float:
     connection = connect()
     row = connection.execute("SELECT refreshed_at FROM refreshes WHERE city=?", (city,)).fetchone()
@@ -895,6 +930,51 @@ def mark_refreshed(city: str, found: int, note: str = "") -> None:
             (city, time.time(), found, note),
         )
         connection.commit()
+
+
+def count_for(**filters) -> int:
+    _, total, _ = search(per_page=1, **filters)
+    return total
+
+
+def relax_options(filters: dict, labels: dict) -> list[dict]:
+    active = [key for key in labels if _is_active(filters, key)]
+    singles = []
+    for key in active:
+        found = count_for(**_without(filters, [key]))
+        if found:
+            singles.append({"key": key, "keys": [key], "title": labels[key], "count": found})
+    if singles:
+        return sorted(singles, key=lambda item: -item["count"])[:4]
+
+    pairs = []
+    for first in range(len(active)):
+        for second in range(first + 1, len(active)):
+            keys = [active[first], active[second]]
+            found = count_for(**_without(filters, keys))
+            if found:
+                title = f"{labels[keys[0]]} и {labels[keys[1]].lower()}"
+                pairs.append({"key": "+".join(keys), "keys": keys, "title": title, "count": found})
+    return sorted(pairs, key=lambda item: -item["count"])[:3]
+
+
+def _is_active(filters: dict, key: str) -> bool:
+    value = filters.get(key)
+    if key == "kinds":
+        return bool(value)
+    return bool(value)
+
+
+def _without(filters: dict, keys: list[str]) -> dict:
+    relaxed = dict(filters)
+    for key in keys:
+        if key == "kinds":
+            relaxed["kinds"] = ()
+        elif key in ("only_docs", "only_verified", "only_contacts"):
+            relaxed[key] = False
+        else:
+            relaxed[key] = ""
+    return relaxed
 
 
 def best_defaults() -> dict:
