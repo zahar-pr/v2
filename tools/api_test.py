@@ -340,9 +340,33 @@ check(
     (reputation["score"], rep_now["score"]),
 )
 
+client.post("/api/pipeline", json={"supplierId": "a", "status": "calling"})
 calls = client.get("/api/calllist").json()
-check("обзвон без отказов", all(i["id"] != "c" for i in calls["items"]))
-check("обзвон только с контактами", all(i["phone"] or i["email"] for i in calls["items"]))
+check(
+    "обзвон: в работе те, кому звоним",
+    [i["id"] for i in calls["working"]] == ["a"],
+    calls["working"],
+)
+check("обзвон без отказов", all(i["id"] != "c" for i in calls["suggest"]))
+check(
+    "обзвон: кандидаты без статуса",
+    all(i["status"] == "new" for i in calls["suggest"]),
+    [(i["id"], i["status"]) for i in calls["suggest"]],
+)
+check(
+    "обзвон только с контактами",
+    all(i["phone"] or i["email"] for i in [*calls["working"], *calls["suggest"]]),
+)
+check(
+    "обзвон: нумерация по приоритету",
+    [i["rank"] for i in calls["suggest"]] == sorted(i["rank"] for i in calls["suggest"])
+    and all(
+        calls["suggest"][n]["score"] >= calls["suggest"][n + 1]["score"]
+        for n in range(len(calls["suggest"]) - 1)
+    ),
+    [(i["rank"], i["score"]) for i in calls["suggest"]],
+)
+client.post("/api/pipeline", json={"supplierId": "a", "status": ""})
 
 rec = client.post("/api/compare/recommend", json={"ids": ["b", "a", "d"]}).json()
 check("сравнение: лучший", rec["bestId"] == "a", rec.get("bestId"))

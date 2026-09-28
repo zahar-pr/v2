@@ -51,7 +51,7 @@ export default function App() {
   const [compare, setCompare] = useState([]);
   const [compareOpen, setCompareOpen] = useState(false);
   const [callsOpen, setCallsOpen] = useState(false);
-  const [calls, setCalls] = useState([]);
+  const [calls, setCalls] = useState({ working: [], suggest: [] });
   const [callsLoading, setCallsLoading] = useState(false);
   const [explainOpen, setExplainOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -206,8 +206,11 @@ export default function App() {
     setCallsLoading(true);
     setMenu(null);
     getCallList({ ...filters, limit: 20 })
-      .then((answer) => { setCalls(answer.items); setCallsLoading(false); })
-      .catch(() => { setCalls([]); setCallsLoading(false); });
+      .then((answer) => {
+        setCalls({ working: answer.working || [], suggest: answer.suggest || [] });
+        setCallsLoading(false);
+      })
+      .catch(() => { setCalls({ working: [], suggest: [] }); setCallsLoading(false); });
   };
 
   const cities = useMemo(() => {
@@ -216,11 +219,12 @@ export default function App() {
     return [meta.labels.anyCity, ...list];
   }, [meta, region]);
 
-  const selected = items.find((s) => s.id === selId)
-    || calls.find((s) => s.id === selId) || null;
+  const inCalls = (id) => calls.working.find((s) => s.id === id)
+    || calls.suggest.find((s) => s.id === id);
+  const selected = items.find((s) => s.id === selId) || inCalls(selId) || null;
   const compareItems = compare
     .map((id) => items.find((s) => s.id === id)
-      || calls.find((s) => s.id === id)
+      || inCalls(id)
       || showcase.find((s) => s.id === id))
     .filter(Boolean);
   const anyFilter = Boolean(query) || onlyDocs || onlyVerified || onlyContacts || statusFilter
@@ -581,7 +585,8 @@ export default function App() {
 
       {callsOpen && (
         <CallList
-          items={calls} statuses={(meta && meta.statuses) || []} loading={callsLoading}
+          working={calls.working} suggest={calls.suggest}
+          statuses={(meta && meta.statuses) || []} loading={callsLoading}
           onStatus={changeStatus}
           onOpen={(id) => { setSelId(id); setCallsOpen(false); }}
           onClose={() => setCallsOpen(false)}

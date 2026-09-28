@@ -141,19 +141,21 @@ async def api_suppliers(
 def api_calllist(
     owner: str = Depends(web.user_id),
     chosen: web.Filters = web.Query_,
-    limit: int = Query(CALL_LIMIT, ge=1, le=50),
+    limit: int = Query(CALL_LIMIT, ge=1, le=60),
 ):
+    statuses = team.statuses_of()
+    working = [key for key, item in statuses.items() if item["status"] == "calling"]
+
     chosen.only_contacts = True
     chosen.status = ""
-    rows, _, _ = chosen.search(1, limit * 2)
-    statuses = team.statuses_of()
-    queue = [
-        row
-        for row in rows
-        if (statuses.get(row["id"]) or {}).get("status", "new") not in ("rejected", "fit")
+    rows, _, _ = chosen.search(1, limit * 3)
+    suggest = [
+        row for row in rows if (statuses.get(row["id"]) or {}).get("status", "new") == "new"
     ]
+
     return {
-        "items": web.cards(queue[:limit], chosen.weights),
+        "working": web.by_score(store.get_many(working), chosen.weights),
+        "suggest": web.by_score(suggest[: limit * 2], chosen.weights)[:limit],
         "weights": chosen.weights,
         "preset": chosen.preset,
     }

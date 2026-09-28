@@ -975,3 +975,21 @@ td.cell--muted { color: var(--text-2); }
   .results__sort { margin-left: 0; flex: 1 1 100%; }
   .results__sort .dd__btn { justify-content: space-between; }
 }
+
+/* ---------- список обзвона: в работе и кандидаты ---------- */
+
+.callbox { padding: 4px clamp(12px, 3vw, 18px) clamp(14px, 3vw, 20px); }
+.callbox__head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 14px 0 2px; padding-top: 4px;
+}
+.callbox__head--next { margin-top: 24px; border-top: 1px solid var(--line-hair); padding-top: 18px; }
+.callbox__title {
+  margin: 0; font-family: var(--font-display); font-size: 17px; letter-spacing: -0.02em;
+}
+.callbox__count {
+  margin-left: auto; padding: 3px 10px; border-radius: 20px;
+  background: var(--field); color: var(--text-2); font-size: 12px;
+}
+.callbox__hint { margin-bottom: 10px; font-size: 13px; line-height: 1.5; color: var(--text-3); }
+.callbox .modal__hint { padding: 22px 0; text-align: left; font-size: 14px; }

@@ -164,6 +164,14 @@ def cards(rows: list[dict], weights: dict) -> list[dict]:
     ]
 
 
+def by_score(rows: list[dict], weights: dict) -> list[dict]:
+    """Карточки по убыванию приоритета: нумерация в списке обзвона должна совпадать с ним."""
+    ranked = sorted(cards(rows, weights), key=lambda item: -item["score"])
+    for number, item in enumerate(ranked, 1):
+        item["rank"] = number
+    return ranked
+
+
 def require_admin(token: str) -> None:
     if not ADMIN_TOKEN or token != ADMIN_TOKEN:
         raise HTTPException(403, "Нужен ADMIN_TOKEN")

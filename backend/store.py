@@ -633,8 +633,17 @@ FULLNESS = " + ".join(
 )
 
 
+# Пара, с которой открывается «Сравнить». Если кого-то из них нет в индексе, берём
+# самую заполненную пару одного продукта, какую найдём.
+PINNED = ("алябьевскийхлебозавод", "первыйхлебокомбинат")
+
+
 def showcase(size: int = 2) -> list[str]:
     """Пара поставщиков одного продукта с самыми заполненными полями — пример сравнения."""
+    pinned = _pinned()
+    if len(pinned) == len(PINNED):
+        return pinned
+
     rows = (
         connect()
         .execute(
@@ -659,6 +668,17 @@ def showcase(size: int = 2) -> list[str]:
         if weight > best_weight:
             best, best_weight = picked, weight
     return [row["id"] for row in best or _distinct(rows, size)]
+
+
+def _pinned() -> list[str]:
+    holders = ", ".join("?" for _ in PINNED)
+    found = {
+        row["name_key"]: row["id"]
+        for row in connect().execute(
+            f"SELECT id, name_key FROM suppliers WHERE name_key IN ({holders})", PINNED
+        )
+    }
+    return [found[key] for key in PINNED if key in found]
 
 
 def _closeness(rows: list) -> int:

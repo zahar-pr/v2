@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import FactorStrip from './FactorStrip.jsx';
-import { COMPARE_ROWS, weightsToString } from '../data/suppliers.js';
+import { COMPARE_ROWS, placeOf, weightsToString } from '../data/suppliers.js';
 import { recommend } from '../api/client.js';
 
 function noteRow(notes, s) {
@@ -61,7 +61,7 @@ export default function CompareModal({ items, notes, narrow, preset, weights, on
                   <div className={`prio prio--${s.level}`}>{s.score}</div>
                   <div>
                     <strong>{s.name}</strong>
-                    <small>{s.typeTitle} · {s.city}</small>
+                    <small>{[s.typeTitle, placeOf(s)].filter(Boolean).join(' · ')}</small>
                   </div>
                   <FactorStrip factors={s.factors} onOpen={() => {}} />
                 </div>
@@ -96,7 +96,7 @@ export default function CompareModal({ items, notes, narrow, preset, weights, on
                     {items.map((s) => (
                       <th key={s.id}>
                         <strong>{s.name}</strong>
-                        <small>{s.city}</small>
+                        <small>{placeOf(s) || s.region}</small>
                       </th>
                     ))}
                   </tr>
@@ -123,7 +123,7 @@ export default function CompareModal({ items, notes, narrow, preset, weights, on
                 <div className="cmpcard" key={s.id} style={{ animationDelay: `${i * 0.06}s` }}>
                   <div className="cmpcard__head">
                     <strong>{s.name}</strong>
-                    <small>{s.city} · приоритет {s.score}</small>
+                    <small>{[placeOf(s) || s.region, `приоритет ${s.score}`].filter(Boolean).join(' · ')}</small>
                   </div>
                   {rows.map((r) => (
                     <div className="cmpcard__row" key={r.label}>
