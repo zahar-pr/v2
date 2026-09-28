@@ -1,45 +1,42 @@
 import React, { useState } from 'react';
 
-// Клиенты Goulash Tech. Логотипы лежат в public/clients/<slug>.(svg|png|webp);
-// если файла нет, показывается название текстом.
+// Клиенты Goulash Tech. Логотипы лежат в public/clients/;
+// если файл не загрузился, показывается название текстом.
 const CLIENTS = [
-  ['UP Sushi', 'up-sushi'],
-  ['Сушкоф и пицца', 'sushkof'],
-  ['FoodGarden', 'foodgarden'],
-  ['Жиши суши', 'zhishi-sushi'],
-  ['СушиСелл', 'sushisell'],
-  ['Ninja Pizza', 'ninja-pizza'],
-  ['Сытый Король', 'sytyj-korol'],
-  ['Неместные', 'nemestnye'],
-  ['Rolik', 'rolik'],
-  ['Японский домик', 'yaponskij-domik'],
-  ['Magic Burger', 'magic-burger'],
-  ['Sushiman', 'sushiman'],
-  ['Sayori', 'sayori'],
-  ['ТиЧ Пицца', 'tich-pizza'],
-  ['Суши Шеф', 'sushi-shef'],
-  ['VЁSLA', 'vesla'],
-  ['Пицца Сан', 'pizza-san'],
-  ['Жизнь Март', 'zhizn-mart'],
-  ['ЁЮ', 'yoyu'],
+  ['UP Sushi', 'up-sushi.svg'],
+  ['Сушкоф и пицца', 'sushkof.svg'],
+  ['FoodGarden', 'foodgarden.svg'],
+  ['Жиши суши', 'zhishi-sushi.svg'],
+  ['СушиСелл', 'sushisell.svg'],
+  ['Ninja Pizza', 'ninja-pizza.svg'],
+  ['Сытый Король', 'sytyj-korol.svg'],
+  ['Неместные', 'nemestnye.svg'],
+  ['Rolik', 'rolik.svg'],
+  ['Японский домик', 'yaponskij-domik.svg'],
+  ['Magic Burger', 'magic-burger.svg'],
+  ['Sushiman', 'sushiman.svg'],
+  ['Sayori', 'sayori.svg'],
+  ['ТиЧ Пицца', 'tich-pizza.svg'],
+  ['Суши Шеф', 'sushi-shef.svg'],
+  ['VЁSLA', 'vesla.svg'],
+  ['Пицца Сан', 'pizza-san.svg'],
+  ['Жизнь Март', 'zhizn-mart.svg'],
+  ['ЁЮ', 'yoyu.png'],
 ];
 
-const EXTS = ['svg', 'png', 'webp'];
-
-function ClientLogo({ name, slug }) {
-  const [ext, setExt] = useState(0);
-  const failed = ext >= EXTS.length;
+function ClientLogo({ name, file }) {
+  const [failed, setFailed] = useState(false);
   return (
     <li className="clients__item" title={name}>
       {failed ? (
         <span className="clients__name">{name}</span>
       ) : (
         <img
-          src={`/clients/${slug}.${EXTS[ext]}`}
+          src={`/clients/${file}`}
           alt={name}
           loading="lazy"
           decoding="async"
-          onError={() => setExt((i) => i + 1)}
+          onError={() => setFailed(true)}
         />
       )}
     </li>
@@ -49,7 +46,7 @@ function ClientLogo({ name, slug }) {
 export default function ClientLogos() {
   return (
     <ul className="clients" aria-label="Клиенты Goulash Tech">
-      {CLIENTS.map(([name, slug]) => <ClientLogo key={slug} name={name} slug={slug} />)}
+      {CLIENTS.map(([name, file]) => <ClientLogo key={file} name={name} file={file} />)}
     </ul>
   );
 }
