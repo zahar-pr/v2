@@ -175,7 +175,7 @@ Vite. Зависимости бэкенда: fastapi, uvicorn, aiohttp.
       domain.py      классификация поставщиков, склонения, разбор дат, источники
       sources/       osm, website, egrul, fns, zoon, wikidata, twogis
     tools/
-      api_test.py    83 проверки: API, правила оценки, pyflakes, висячие вызовы
+      api_test.py    86 проверок: API, правила оценки, палитра, pyflakes
       seed_demo.py   демо-наполнение работой команды
       fix_registry.py  чистка реестровых сведений, попавших не тому поставщику
 
@@ -255,6 +255,18 @@ Vite. Зависимости бэкенда: fastapi, uvicorn, aiohttp.
     POST /api/compare/recommend   лучший, объяснение разницы, что спросить
     POST /api/admin/verify        ручное подтверждение данных (ADMIN_TOKEN)
     POST /api/admin/refresh       переиндексировать город (ADMIN_TOKEN)
+
+## Тема оформления
+
+Кнопка в шапке переключает светлую и тёмную тему. Пока выбора не сделали, страница
+слушает системную настройку (`prefers-color-scheme`) и меняется вместе с ней; после
+первого нажатия выбор запоминается в `localStorage` и системную настройку перебивает.
+
+Работает это потому, что в правилах CSS не осталось ни одного цвета цифрами — всё через
+токены в `:root`, а `:root[data-theme='dark']` переопределяет те же имена другими
+значениями. `color-scheme` переключается вместе с темой, поэтому скроллбары и нативный
+`select` статуса тоже темнеют. Тест `api_test.py` следит, чтобы новые цвета не
+появлялись мимо палитры.
 
 ## Кураторские списки: кому верим и кого обходим
 
@@ -429,7 +441,7 @@ Vite. Зависимости бэкенда: fastapi, uvicorn, aiohttp.
 
 ## Проверки после любых правок
 
-    .venv/bin/python tools/api_test.py     # 83 проверки API и правил оценки
+    .venv/bin/python tools/api_test.py     # 86 проверок API и правил оценки
     cd frontend && npm run build
     ./run.sh
     curl 'localhost:8000/api/meta'

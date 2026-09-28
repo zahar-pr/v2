@@ -1,6 +1,7 @@
 import ast
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -290,6 +291,15 @@ check(
     scoring.PRESETS["balanced"]["title"] == "Сбалансировано",
     scoring.PRESETS["balanced"]["title"],
 )
+
+css = (ROOT / "frontend" / "src" / "styles" / "global.css").read_text()
+check("тёмная тема объявлена", ":root[data-theme='dark']" in css)
+check("светлая и тёмная схемы для системных элементов", css.count("color-scheme") == 2)
+palette = css[css.index(":root {") : css.index("* { box-sizing")]
+outside = re.findall(r"#[0-9a-fA-F]{3,8}", css.replace(palette, ""))
+dark_block = css[css.index(":root[data-theme='dark']") :]
+outside = [value for value in outside if value not in dark_block]
+check("цвета только в палитре, не в правилах", not outside, outside[:6])
 
 showcase = client.get("/api/meta").json()["showcase"]
 check("витрина сравнения: пара", len(showcase) == 2, showcase)

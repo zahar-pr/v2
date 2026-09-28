@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Logo from './components/Logo.jsx';
 import Dropdown from './components/Dropdown.jsx';
 import FiltersPanel from './components/FiltersPanel.jsx';
+import ThemeToggle from './components/ThemeToggle.jsx';
 import SupplierCard from './components/SupplierCard.jsx';
 import SupplierPanel from './components/SupplierPanel.jsx';
 import CompareModal from './components/CompareModal.jsx';
 import CallList from './components/CallList.jsx';
 import ScoreExplainer from './components/ScoreExplainer.jsx';
 import useNarrow from './hooks/useNarrow.js';
+import useTheme from './hooks/useTheme.js';
 import useDebounced from './hooks/useDebounced.js';
 import {
   getCallList, getMeta, getNotes, getStatus, getSuppliers, saveNote, setStatus,
@@ -59,6 +61,7 @@ export default function App() {
   const [showcase, setShowcase] = useState([]);
 
   const narrow = useNarrow();
+  const [theme, toggleTheme] = useTheme();
   const settledQuery = useDebounced(query, 350);
   const timers = useRef({});
 
@@ -328,6 +331,7 @@ export default function App() {
             <span className="brand__name">Goulash Поставщиков</span>
           </div>
           <div className="header__found">Найдено: <b>{loading ? '…' : total}</b></div>
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <button type="button" className="btn-compare" onClick={openCalls}>
             Обзвон
             <span className="btn-compare__count">{counts.calling || 0}</span>
