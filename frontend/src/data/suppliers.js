@@ -56,6 +56,14 @@ export function weightsToString(weights) {
 
 export const COMPARE_ROWS = [
   { label: 'Приоритет звонка', get: (s) => `${s.score} из 100 · ${dash(s.verdict)}`, mint: true },
+  {
+    label: 'Проверка поставщика',
+    get: (s) => {
+      if (s.trustTier === 'trusted') return `поставщик сетей: ${s.clients.join(', ') || 'HoReCa'}`;
+      if (s.trustTier === 'blocked') return `санкции надзора: ${dash(s.incident.sanction)}`;
+      return 'в кураторских списках нет';
+    },
+  },
   { label: 'Тип поставщика', get: (s) => dash(s.typeTitle) },
   { label: 'Город', get: (s) => placeOf(s) || '—' },
   {

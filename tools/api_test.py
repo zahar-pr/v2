@@ -123,6 +123,22 @@ store.save_enrichment(
 )
 store.set_verified("a", True, "контакты подтверждены на сайте поставщика")
 store.save_enrichment("c", {"delivery": "ТК по России", "geo": "Вся Россия"})
+store.save_enrichment(
+    "b",
+    {
+        "trust_tier": "trusted",
+        "trust_note": "Поставляет для: Burger King.",
+        "clients": ["Burger King"],
+    },
+)
+store.save_enrichment(
+    "c",
+    {
+        "trust_tier": "blocked",
+        "trust_note": "Приостановка 60 суток.",
+        "incident": {"risk": "Высокий", "sanction": "Приостановка 60 суток"},
+    },
+)
 for item in store.unscored(50):
     index.score_one(item)
 
@@ -249,6 +265,32 @@ check(
     client.get("/api/suppliers", params={"category": "bakery,wholesale"}).json()["total"] == 4,
 )
 
+cards = {item["id"]: item for item in client.get("/api/suppliers").json()["items"]}
+check("проверенный поставщик: балл 100", cards["b"]["score"] == 100, cards["b"]["score"])
+check("проверенный поставщик: вердикт", cards["b"]["level"] == "trusted", cards["b"]["level"])
+check("проверенный поставщик: клиенты", cards["b"]["clients"] == ["Burger King"])
+check("санкции надзора: балл 0", cards["c"]["score"] == 0, cards["c"]["score"])
+check("санкции надзора: вердикт", cards["c"]["level"] == "blocked", cards["c"]["level"])
+check(
+    "санкции надзора: причина видна",
+    "Приостановка" in cards["c"]["incident"].get("sanction", ""),
+    cards["c"]["incident"],
+)
+check(
+    "репутация весит больше всех в «Сбалансировано»",
+    max(
+        scoring.PRESETS["balanced"]["weights"],
+        key=scoring.PRESETS["balanced"]["weights"].get,
+    )
+    == "reputation",
+    scoring.PRESETS["balanced"]["weights"],
+)
+check(
+    "пресет переименован",
+    scoring.PRESETS["balanced"]["title"] == "Сбалансировано",
+    scoring.PRESETS["balanced"]["title"],
+)
+
 showcase = client.get("/api/meta").json()["showcase"]
 check("витрина сравнения: пара", len(showcase) == 2, showcase)
 check(
@@ -368,8 +410,11 @@ check(
 )
 client.post("/api/pipeline", json={"supplierId": "a", "status": ""})
 
-rec = client.post("/api/compare/recommend", json={"ids": ["b", "a", "d"]}).json()
+rec = client.post("/api/compare/recommend", json={"ids": ["a", "d"]}).json()
 check("сравнение: лучший", rec["bestId"] == "a", rec.get("bestId"))
+
+curated = client.post("/api/compare/recommend", json={"ids": ["b", "a", "c"]}).json()
+check("сравнение: проверенный впереди", curated["bestId"] == "b", curated.get("bestId"))
 check("сравнение: объяснение", len(rec["diff"]) > 0 and rec["diff"][0]["factor"])
 
 csv_answer = client.get("/api/export.csv")

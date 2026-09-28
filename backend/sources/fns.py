@@ -193,6 +193,12 @@ def _match(name: str, rows: list[dict], region_code: str = "") -> dict | None:
     wanted = _key(name)
     if not domain.distinctive(name):
         rows = [row for row in rows if domain.same_region(row.get("inn"), region_code)]
+    # ликвидированный тёзка из другого региона — почти наверняка не наша компания
+    rows = [
+        row
+        for row in rows
+        if row.get("pr_liq") != "1" or domain.same_region(row.get("inn"), region_code)
+    ]
     exact = [row for row in rows if _key(row.get("namec") or "") == wanted]
     if len(exact) == 1:
         return exact[0]

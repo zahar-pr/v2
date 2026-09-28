@@ -78,6 +78,10 @@ ENRICHED_FIELDS = (
     "legal_active",
     "reviews_url",
     "reviews_source",
+    "trust_tier",
+    "trust_note",
+    "clients",
+    "incident",
 )
 
 

@@ -77,6 +77,10 @@ async def _search(session, query: str, region_code: str) -> list[dict]:
 def _match(name: str, rows: list[dict], region_code: str = "") -> dict | None:
     if not domain.distinctive(name):
         rows = [row for row in rows if domain.same_region(row.get("i"), region_code)]
+    # ликвидированный тёзка из другого региона — почти наверняка не наша компания
+    rows = [
+        row for row in rows if not _closed(row) or domain.same_region(row.get("i"), region_code)
+    ]
     if not rows:
         return None
 
@@ -92,9 +96,13 @@ def _match(name: str, rows: list[dict], region_code: str = "") -> dict | None:
     return full[0] if len(full) == 1 else None
 
 
-def _to_record(supplier: dict, row: dict, inn: str) -> dict:
+def _closed(row: dict) -> bool:
     registered = row.get("r") or ""
-    closed = bool(row.get("e") and row.get("e") != registered)
+    return bool(row.get("e") and row.get("e") != registered)
+
+
+def _to_record(supplier: dict, row: dict, inn: str) -> dict:
+    closed = _closed(row)
     head = head_of(row.get("g") or "")
     found = {
         "legal_name": row.get("n") or row.get("c") or "",
@@ -110,7 +118,7 @@ def _to_record(supplier: dict, row: dict, inn: str) -> dict:
         found["inn"] = row["i"]
     if row.get("o"):
         found["ogrn"] = row["o"]
-    year = domain.year_of(registered)
+    year = domain.year_of(row.get("r") or "")
     if year:
         found["founded"] = year
         found["years"] = domain.years_text(year)

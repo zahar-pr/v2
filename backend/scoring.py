@@ -28,15 +28,15 @@ FACTORS = (
 
 PRESETS = {
     "balanced": {
-        "title": "Как обычно",
-        "hint": "Профиль поставщика и связь важнее всего, дальше репутация и доставка",
+        "title": "Сбалансировано",
+        "hint": "Репутация весит больше всего, дальше опт, связь и доставка",
         "weights": {
-            "volume": 24,
-            "reach": 22,
-            "reputation": 20,
-            "logistics": 16,
-            "docs": 12,
-            "trust": 6,
+            "reputation": 30,
+            "volume": 20,
+            "reach": 17,
+            "docs": 14,
+            "logistics": 12,
+            "trust": 7,
         },
     },
     "trusted": {
@@ -102,6 +102,9 @@ PRESETS = {
 }
 DEFAULT_PRESET = "balanced"
 
+TRUSTED = "trusted"
+BLOCKED = "blocked"
+
 VERDICTS = (
     (60, "high", "Звонить первым"),
     (35, "mid", "Хороший кандидат"),
@@ -136,13 +139,23 @@ def evaluate(supplier: dict) -> dict:
     }
 
 
-def total(scores: dict, weights: dict) -> int:
+def total(scores: dict, weights: dict, supplier: dict | None = None) -> int:
+    tier = (supplier or {}).get("trust_tier") or ""
+    if tier == TRUSTED:
+        return 100
+    if tier == BLOCKED:
+        return 0
     weight_sum = sum(weights.values()) or 1
     points = sum(scores[factor.id]["score"] * weights.get(factor.id, 0) for factor in FACTORS)
     return round(points / weight_sum)
 
 
-def verdict_of(score: int) -> tuple[str, str]:
+def verdict_of(score: int, supplier: dict | None = None) -> tuple[str, str]:
+    tier = (supplier or {}).get("trust_tier") or ""
+    if tier == TRUSTED:
+        return "trusted", "Проверенный поставщик сетей"
+    if tier == BLOCKED:
+        return "blocked", "Не рекомендуем: санкции надзора"
     return next((level, text) for limit, level, text in VERDICTS if score >= limit)
 
 
@@ -180,10 +193,26 @@ class Tally:
 
 def _reputation(s: dict) -> dict:
     tally = Tally()
+    _rate_curated(tally, s)
     _rate_reviews(tally, s)
     _rate_team(tally, s)
     _rate_registry(tally, s)
     return tally.box()
+
+
+def _rate_curated(tally: Tally, s: dict) -> None:
+    """Кураторский список: поставщики сетей и те, кому приостанавливали работу."""
+    tier = s.get("trust_tier") or ""
+    clients = s.get("clients") or []
+    if tier == TRUSTED:
+        where = ", ".join(clients[:3])
+        tally.add(60, f"поставщик сетей: {where}" if where else "проверенный поставщик HoReCa")
+    elif tier == BLOCKED:
+        trouble = (s.get("incident") or {}).get("sanction") or "санкции надзора"
+        tally.lack(
+            f"Роспотребнадзор: {trouble.lower()}",
+            "Не работать до снятия ограничений и повторной проверки",
+        )
 
 
 def _rate_reviews(tally: Tally, s: dict) -> None:

@@ -1,7 +1,7 @@
 import React from 'react';
 import FactorStrip from './FactorStrip.jsx';
 import StatusPicker from './StatusPicker.jsx';
-import { ageText, placeOf, plural, ratingOf, statusTitle, strongest, weakest } from '../data/suppliers.js';
+import { placeOf, plural, ratingOf, statusTitle, strongest, weakest } from '../data/suppliers.js';
 
 /** Пустые поля не рисуем: строка выдачи должна показывать то, что известно. */
 function factsOf(s) {
@@ -23,11 +23,22 @@ export default function SupplierCard({
   const facts = factsOf(s);
 
   return (
-    <article className="row" style={{ animationDelay: `${Math.min(index, 8) * 0.03}s` }}>
+    <article
+      className={`row${s.trustTier ? ` row--${s.trustTier}` : ''}`}
+      style={{ animationDelay: `${Math.min(index, 8) * 0.03}s` }}
+    >
       <div className="row__main">
+        {s.trustTier === 'trusted' && (
+          <div className="mark mark--trusted">Проверенный поставщик сетей</div>
+        )}
+        {s.trustTier === 'blocked' && (
+          <div className="mark mark--blocked">
+            Не рекомендуем{s.incident.sanction ? ` · ${s.incident.sanction}` : ''}
+          </div>
+        )}
         <button type="button" className="row__name" onClick={onOpen}>{s.name}</button>
         <div className="row__sub">
-          {[s.typeTitle, placeOf(s), ageText(s)].filter(Boolean).join(' · ')}
+          {[s.typeTitle, placeOf(s), s.years].filter(Boolean).join(' · ')}
         </div>
 
         <div className="tags">
@@ -52,6 +63,8 @@ export default function SupplierCard({
             </span>
           )}
         </div>
+
+        {s.trustNote && <p className="row__note">{s.trustNote}</p>}
 
         <FactorStrip factors={s.factors} onOpen={onOpen} />
 

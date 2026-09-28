@@ -120,8 +120,8 @@ export default function App() {
   useEffect(() => {
     if (!showcase.length) return;
     try {
-      if (localStorage.getItem('provizia_seen')) return;
-      localStorage.setItem('provizia_seen', '1');
+      if (localStorage.getItem('provizia_seen_v2')) return;
+      localStorage.setItem('provizia_seen_v2', '1');
     } catch (error) {
       // приватный режим: пример всё равно показываем
     }
@@ -582,6 +582,8 @@ export default function App() {
       {compareOpen && (
         <CompareModal
           items={compareItems} notes={notes} narrow={narrow}
+          showcase={showcase}
+          onShowcase={() => setCompare(showcase.slice(0, MAX_COMPARE).map((x) => x.id))}
           preset={preset} weights={weights}
           onClear={() => setCompare([])} onClose={() => setCompareOpen(false)}
         />

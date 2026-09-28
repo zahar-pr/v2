@@ -121,8 +121,8 @@ def card(
     checks: dict | None = None,
 ) -> dict:
     factors = scoring.evaluate(scoring.with_age(row))
-    score = scoring.total(factors, weights)
-    level, verdict = scoring.verdict_of(score)
+    score = scoring.total(factors, weights, row)
+    level, verdict = scoring.verdict_of(score, row)
 
     return {
         "id": row["id"],
@@ -238,6 +238,10 @@ def _trust(row: dict) -> dict:
         "source": row.get("source", ""),
         "sourceTitle": row.get("source_title", ""),
         "checkedAt": row.get("checked_at") or row.get("updated_at") or 0,
+        "trustTier": row.get("trust_tier") or "",
+        "trustNote": row.get("trust_note") or "",
+        "clients": row.get("clients") or [],
+        "incident": row.get("incident") or {},
     }
 
 

@@ -15,6 +15,9 @@
   --mint-ink: #0a7a57;
   --warn-bg: #fdefdc;
   --warn-ink: #8a5a12;
+  --bad: #e03131;
+  --bad-bg: #ffe9e7;
+  --bad-ink: #a01b1b;
 
   --deep: #0a3440;
   --ink: #0f2229;
@@ -976,3 +979,45 @@ td.cell--muted { color: var(--text-2); }
 @media (max-width: 960px) {
   .catalog__in { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- кураторские метки: поставщики сетей и санкции надзора ---------- */
+
+.row--trusted { background: #f4fdf8; box-shadow: inset 3px 0 0 var(--mint); }
+.row--trusted:hover { background: #edfbf4; }
+.row--blocked { background: #fff5f4; box-shadow: inset 3px 0 0 var(--bad); }
+.row--blocked:hover { background: #fff0ee; }
+
+.mark {
+  align-self: flex-start; padding: 3px 10px; border-radius: var(--pill);
+  font-size: 12px; font-weight: 500; letter-spacing: 0.01em;
+}
+.mark--trusted { background: var(--mint); color: var(--deep); }
+.mark--blocked { background: var(--bad); color: #fff; }
+
+.row__note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.row--blocked .row__note { color: var(--bad-ink); }
+
+.prio--trusted { background: var(--mint); color: var(--deep); }
+.prio--blocked { background: var(--bad); color: #fff; }
+.row--blocked .row__verdict { color: var(--bad-ink); }
+
+.verdictbox {
+  padding: 14px 16px; border-radius: var(--r-m);
+  border: 1px solid var(--mint); background: var(--mint-bg);
+}
+.verdictbox--blocked { border-color: var(--bad); background: var(--bad-bg); }
+.verdictbox__title {
+  font-family: var(--font-display); font-size: 17px; letter-spacing: -0.02em;
+  color: var(--mint-ink);
+}
+.verdictbox--blocked .verdictbox__title { color: var(--bad-ink); }
+.verdictbox__text { margin: 7px 0 0; font-size: 14px; line-height: 1.55; color: var(--text-2); }
+.verdictbox--blocked .verdictbox__text { color: var(--bad-ink); }
+.verdictbox__meta { margin-top: 7px; font-size: 13px; color: var(--text-3); }
+.verdictbox--blocked .verdictbox__meta { color: var(--bad-ink); }
+.verdictbox__links { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 9px; }
+.verdictbox__links a { font-size: 13px; overflow-wrap: anywhere; }
+.verdictbox--blocked .verdictbox__links a { color: var(--bad-ink); text-decoration: underline; }
+
+.tag--trusted { background: var(--mint-bg); color: var(--mint-ink); }
+.tag--blocked { background: var(--bad-bg); color: var(--bad-ink); }

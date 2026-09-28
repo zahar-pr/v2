@@ -147,7 +147,7 @@ def _join(first, second, limit: int) -> list:
 def score_one(row: dict) -> dict:
     factors = scoring.evaluate(scoring.with_age(row))
     scores = {factor.id: factors[factor.id]["score"] for factor in scoring.FACTORS}
-    scores["total"] = scoring.total(factors, scoring.weights_of(scoring.DEFAULT_PRESET))
+    scores["total"] = scoring.total(factors, scoring.weights_of(scoring.DEFAULT_PRESET), row)
     store.save_scores(row["id"], scores)
     return scores
 

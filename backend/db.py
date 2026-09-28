@@ -155,7 +155,7 @@ NULLABLE_FIELDS = ("lat", "lon", "distance_km")
 NUMERIC_FIELDS = ("wholesale", "branches", "checked_at")
 
 
-JSON_FIELDS = ("phones", "emails", "certs", "sources", "socials")
+JSON_FIELDS = ("phones", "emails", "certs", "sources", "socials", "clients", "incident")
 
 
 ADDED_COLUMNS = (
@@ -185,6 +185,11 @@ ADDED_COLUMNS = (
     ("price_list", "TEXT NOT NULL DEFAULT ''"),
     ("own_delivery", "INTEGER NOT NULL DEFAULT 0"),
     ("egrul_checked", "REAL NOT NULL DEFAULT 0"),
+    # кураторский слой: проверенные поставщики сетей и компании с санкциями
+    ("trust_tier", "TEXT NOT NULL DEFAULT ''"),
+    ("trust_note", "TEXT NOT NULL DEFAULT ''"),
+    ("clients", "TEXT NOT NULL DEFAULT '[]'"),
+    ("incident", "TEXT NOT NULL DEFAULT '[]'"),
 )
 
 

@@ -93,6 +93,36 @@ export default function SupplierPanel({
           {s.about && <p className="panel__about">{s.about}</p>}
 
           <div>
+            {s.trustTier && (
+              <div className={`verdictbox verdictbox--${s.trustTier}`}>
+                <div className="verdictbox__title">
+                  {s.trustTier === 'trusted'
+                    ? 'Проверенный поставщик сетей'
+                    : 'Не рекомендуем к работе'}
+                </div>
+                <p className="verdictbox__text">{s.trustNote}</p>
+                {s.trustTier === 'blocked' && s.incident.risk && (
+                  <div className="verdictbox__meta">
+                    Риск: {s.incident.risk.toLowerCase()}
+                    {s.incident.date ? ` · ${s.incident.date}` : ''}
+                    {s.incident.chain ? ` · сеть «${s.incident.chain}»` : ''}
+                  </div>
+                )}
+                {s.clients.length > 0 && (
+                  <div className="verdictbox__meta">Клиенты: {s.clients.join(', ')}</div>
+                )}
+                {s.sources.length > 0 && (
+                  <div className="verdictbox__links">
+                    {s.sources.map((item) => (
+                      <a key={item.url} href={item.url} target="_blank" rel="noreferrer">
+                        {item.title} ↗
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="section-title">Почему такой приоритет</div>
             <div className="scorecard">
               {s.factors.map((f) => (

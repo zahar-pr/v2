@@ -7,7 +7,9 @@ function noteRow(notes, s) {
   return notes[s.id] !== undefined ? notes[s.id] : s.note;
 }
 
-export default function CompareModal({ items, notes, narrow, preset, weights, onClear, onClose }) {
+export default function CompareModal({
+  items, notes, narrow, preset, weights, showcase, onShowcase, onClear, onClose,
+}) {
   const [advice, setAdvice] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -50,7 +52,12 @@ export default function CompareModal({ items, notes, narrow, preset, weights, on
 
           {items.length === 0 && (
             <div className="modal__hint">
-              Добавьте в сравнение до трёх поставщиков кнопкой «Сравнить» в карточке.
+              <p>Добавьте в сравнение до трёх поставщиков кнопкой «Сравнить» в карточке.</p>
+              {showcase.length > 0 && (
+                <button type="button" className="btn btn--cyan" onClick={onShowcase}>
+                  Показать пример: {showcase.map((s) => s.name).join(' и ')}
+                </button>
+              )}
             </div>
           )}
 
