@@ -18,7 +18,10 @@ export default function Dropdown({ label, value, options, open, onToggle, onSele
 
   return (
     <div className={`dd${open ? ' dd--open' : ''}`} ref={ref}>
-      <button type="button" className="dd__btn" onClick={() => onToggle(!open)} aria-expanded={open}>
+      <button
+        type="button" className="dd__btn" aria-label={label} aria-expanded={open}
+        onClick={() => onToggle(!open)}
+      >
         <span className="dd__value">
           <span className="dd__label">{label}</span>
           <span className="dd__current">{value}</span>

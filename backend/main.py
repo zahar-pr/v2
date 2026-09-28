@@ -96,7 +96,10 @@ class CompareIn(BaseModel):
 
 @app.get("/api/meta")
 def api_meta():
-    return payload.meta(store.stats(), index.state, _sources(), store.best_defaults())
+    answer = payload.meta(store.stats(), index.state, _sources(), store.best_defaults())
+    showcase = store.get_many(store.showcase())
+    answer["showcase"] = web.cards(showcase, web.weights_of("", ""))
+    return answer
 
 
 @app.get("/api/status")

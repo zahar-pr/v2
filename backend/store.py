@@ -1,5 +1,8 @@
 import time
+from dataclasses import dataclass
+from urllib.parse import urlsplit
 
+import catalog
 import scoring
 from db import (
     JSON_FIELDS,
@@ -78,6 +81,11 @@ ENRICHED_FIELDS = (
 )
 
 
+# «опт» и «упаковка» — не продукт: сравнивать поставщиков надо по одному товару
+GENERIC_CATS = frozenset({"wholesale", "packaging"})
+
+SOCIAL_HOSTS = frozenset({"vk.com", "t.me", "instagram.com", "facebook.com", "ok.ru"})
+
 HAS_CONTACTS = "(phones != '[]' OR emails != '[]')"
 
 KIND_ORDER = (
@@ -94,6 +102,14 @@ SCORE_COLUMNS = (
     "score_trust",
     "score_reputation",
 )
+
+
+@dataclass(frozen=True)
+class Slice:
+    """Условие выборки и его параметры — чтобы считать фасеты по срезам."""
+
+    condition: str
+    params: list
 
 
 def priority_sql(weights: dict) -> str:
@@ -235,14 +251,14 @@ def search(
     page: int = 1,
     per_page: int = 12,
 ) -> tuple[list[dict], int, dict]:
-    common, values = _conditions(
-        query, category, region, city, only_docs, only_verified, only_contacts, status
+    base, base_values = _conditions(
+        query, region, city, only_docs, only_verified, only_contacts, status
     )
-    where, params = list(common), list(values)
-    if kinds:
-        where.append("kind_class IN (" + ", ".join("?" for _ in kinds) + ")")
-        params.extend(kinds)
+    by_cat, cat_values = _category_clause(category)
+    by_kind, kind_values = _kind_clause(kinds)
 
+    where = [*base, *by_cat, *by_kind]
+    params = [*base_values, *cat_values, *kind_values]
     condition = " AND ".join(where)
     connection = connect()
     total = connection.execute(
@@ -253,13 +269,31 @@ def search(
         f"ORDER BY {sort_sql(sort, weights or {})} LIMIT ? OFFSET ?",
         (*params, per_page, max(0, (page - 1) * per_page)),
     ).fetchall()
-    facets = _facets(condition, params, " AND ".join(common), values)
+    facets = _facets(
+        Slice(condition, params),
+        Slice(" AND ".join([*base, *by_cat]), [*base_values, *cat_values]),
+        Slice(" AND ".join([*base, *by_kind]), [*base_values, *kind_values]),
+    )
     return [row_to_dict(row) for row in rows], total, facets
+
+
+def _category_clause(category: str) -> tuple[list[str], list]:
+    chosen = [item for item in (category or "").split(",") if item]
+    if not chosen:
+        return [], []
+    return ["(" + " OR ".join("cats LIKE ?" for _ in chosen) + ")"], [
+        f"%,{item},%" for item in chosen
+    ]
+
+
+def _kind_clause(kinds: tuple[str, ...]) -> tuple[list[str], list]:
+    if not kinds:
+        return [], []
+    return ["kind_class IN (" + ", ".join("?" for _ in kinds) + ")"], list(kinds)
 
 
 def _conditions(
     query: str,
-    category: str,
     region: str,
     city: str,
     only_docs: bool,
@@ -269,9 +303,6 @@ def _conditions(
 ) -> tuple[list[str], list]:
     where, params = ["1=1"], []
 
-    if category:
-        where.append("cats LIKE ?")
-        params.append(f"%,{category},%")
     if city:
         where.append("city = ?")
         params.append(city)
@@ -293,25 +324,34 @@ def _conditions(
     return where, params
 
 
-def _facets(condition: str, params: list, without_kinds: str, wide_params: list) -> dict:
+def _facets(current: Slice, without_kinds: Slice, without_cats: Slice) -> dict:
     connection = connect()
     types = {
         row["kind_class"]: row["n"]
         for row in connection.execute(
-            f"SELECT kind_class, COUNT(*) AS n FROM suppliers WHERE {without_kinds} "
+            f"SELECT kind_class, COUNT(*) AS n FROM suppliers WHERE {without_kinds.condition} "
             "GROUP BY kind_class",
-            tuple(wide_params),
+            tuple(without_kinds.params),
         )
     }
+    sums = ", ".join(
+        f"SUM(CASE WHEN cats LIKE '%,{item.id},%' THEN 1 ELSE 0 END) AS {item.id}"
+        for item in catalog.CATEGORIES
+    )
+    cats = connection.execute(
+        f"SELECT {sums} FROM suppliers WHERE {without_cats.condition}",
+        tuple(without_cats.params),
+    ).fetchone()
     counters = connection.execute(
         f"SELECT SUM(CASE WHEN {HAS_CONTACTS} THEN 1 ELSE 0 END) AS contacts, "
         "SUM(CASE WHEN certs != '[]' THEN 1 ELSE 0 END) AS docs, "
         "SUM(CASE WHEN verified = 1 THEN 1 ELSE 0 END) AS verified "
-        f"FROM suppliers WHERE {condition}",
-        tuple(params),
+        f"FROM suppliers WHERE {current.condition}",
+        tuple(current.params),
     ).fetchone()
     return {
         "types": types,
+        "cats": {item.id: cats[item.id] or 0 for item in catalog.CATEGORIES},
         "withContacts": counters["contacts"] or 0,
         "withDocs": counters["docs"] or 0,
         "verified": counters["verified"] or 0,
@@ -558,6 +598,93 @@ def _without(filters: dict, keys: list[str]) -> dict:
         else:
             relaxed[key] = ""
     return relaxed
+
+
+# Чем больше строк таблицы сравнения окажется непустыми, тем полезнее пара поставщиков.
+# Коммерческие условия и отзывы встречаются реже прочего, поэтому весят больше.
+COMPARE_FIELDS = (
+    ("moq", 2),
+    ("price", 2),
+    ("delivery", 2),
+    ("geo", 2),
+    ("about", 1),
+    ("address", 1),
+    ("hours", 1),
+    ("website", 1),
+    ("years", 1),
+    ("inn", 1),
+    ("ogrn", 1),
+    ("legal_name", 1),
+    ("legal_status", 1),
+    ("okved_name", 1),
+    ("manager", 1),
+)
+FULLNESS = " + ".join(
+    (
+        *(f"(IFNULL({field}, '') != '') * {weight}" for field, weight in COMPARE_FIELDS),
+        "(phones != '[]')",
+        "(emails != '[]')",
+        "(certs != '[]') * 2",
+        "(socials != '[]')",
+        "(verified = 1)",
+        "(IFNULL(reviews_source, '') != '') * 3",
+        "(comments_count > 0) * 3",
+    )
+)
+
+
+def showcase(size: int = 2) -> list[str]:
+    """Пара поставщиков одного продукта с самыми заполненными полями — пример сравнения."""
+    rows = (
+        connect()
+        .execute(
+            f"SELECT id, city, region, cats, website, inn, {FULLNESS} AS filled FROM suppliers "
+            f"WHERE kind_class != 'retail' AND {HAS_CONTACTS} ORDER BY filled DESC LIMIT 300"
+        )
+        .fetchall()
+    )
+
+    by_cat: dict[str, list] = {}
+    for row in rows:
+        for item in (row["cats"] or "").split(","):
+            if item and item not in GENERIC_CATS:
+                by_cat.setdefault(item, []).append(row)
+
+    best, best_weight = [], -1
+    for found in by_cat.values():
+        picked = _distinct(found, size)
+        if len(picked) < size:
+            continue
+        weight = sum(row["filled"] for row in picked) + _closeness(picked)
+        if weight > best_weight:
+            best, best_weight = picked, weight
+    return [row["id"] for row in best or _distinct(rows, size)]
+
+
+def _closeness(rows: list) -> int:
+    """Поставщиков одного города сравнивать нагляднее, одного региона — тоже."""
+    if len({row["city"] for row in rows}) == 1:
+        return 3
+    return 1 if len({row["region"] for row in rows}) == 1 else 0
+
+
+def _distinct(rows: list, size: int) -> list:
+    """Одну и ту же компанию в сравнение не берём: сайт и ИНН должны различаться."""
+    taken, seen = [], set()
+    for row in rows:
+        marks = {mark for mark in (_host(row["website"]), row["inn"]) if mark}
+        if marks & seen:
+            continue
+        seen |= marks
+        taken.append(row)
+        if len(taken) == size:
+            break
+    return taken
+
+
+def _host(website: str | None) -> str:
+    host = urlsplit(website or "").netloc.lower().removeprefix("www.")
+    return "" if host in SOCIAL_HOSTS else host
 
 
 def best_defaults() -> dict:

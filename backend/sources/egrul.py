@@ -37,7 +37,7 @@ async def lookup(session, supplier: dict, region_code: str = "") -> dict | None:
         return None
 
     rows = await _search(session, name, region_code)
-    row = _match(name, rows)
+    row = _match(name, rows, region_code)
     if row is None:
         return None
     return _to_record(supplier, row, row.get("i", ""))
@@ -74,7 +74,9 @@ async def _search(session, query: str, region_code: str) -> list[dict]:
     return []
 
 
-def _match(name: str, rows: list[dict]) -> dict | None:
+def _match(name: str, rows: list[dict], region_code: str = "") -> dict | None:
+    if not domain.distinctive(name):
+        rows = [row for row in rows if domain.same_region(row.get("i"), region_code)]
     if not rows:
         return None
 

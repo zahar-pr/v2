@@ -234,7 +234,32 @@ check(
 )
 paged = client.get("/api/suppliers", params={"perPage": 2, "page": 2}).json()
 check("пагинация", paged["page"] == 2 and paged["pages"] == 2)
-check("фасеты", client.get("/api/suppliers").json()["facets"]["types"]["producer"] == 2)
+facets = client.get("/api/suppliers").json()["facets"]
+check("фасеты: типы", facets["types"]["producer"] == 2)
+check("фасеты: категории", facets["cats"]["bakery"] == 3 and facets["cats"]["wholesale"] == 1)
+check(
+    "фасеты категорий не зависят от выбранной категории",
+    client.get("/api/suppliers", params={"category": "wholesale"}).json()["facets"]["cats"][
+        "bakery"
+    ]
+    == 3,
+)
+check(
+    "несколько категорий разом",
+    client.get("/api/suppliers", params={"category": "bakery,wholesale"}).json()["total"] == 4,
+)
+
+showcase = client.get("/api/meta").json()["showcase"]
+check("витрина сравнения: пара", len(showcase) == 2, showcase)
+check(
+    "витрина сравнения: общий продукт",
+    bool(set(showcase[0]["cats"]) & set(showcase[1]["cats"])),
+    [item["cats"] for item in showcase],
+)
+check(
+    "витрина сравнения: разные компании",
+    showcase[0]["id"] != showcase[1]["id"] and showcase[0]["site"] != showcase[1]["site"],
+)
 
 empty = client.get("/api/suppliers", params={"onlyDocs": "true", "q": "несуществующее"}).json()
 check(

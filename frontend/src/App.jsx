@@ -18,16 +18,10 @@ const MAX_COMPARE = 3;
 const SKELETONS = [0, 1, 2, 3, 4, 5];
 const PER_PAGE = 12;
 
-const STEPS = [
-  { n: 1, color: '#00E1E1', title: 'Отобрать нужных', text: 'Производства и оптовые базы отдельно от розницы, по категории, региону и городу.' },
-  { n: 2, color: '#2BE2A0', title: 'Понять, кому звонить', text: 'Приоритет звонка складывается из пяти факторов, и видно, из каких именно.' },
-  { n: 3, color: '#FFFFFF', title: 'Довести до решения', text: 'Список обзвона, вопросы к каждому поставщику, статусы и заметки по переговорам.' },
-];
-
 export default function App() {
   const [meta, setMeta] = useState(null);
   const [query, setQuery] = useState('');
-  const [cat, setCat] = useState('all');
+  const [cats, setCats] = useState([]);
   const [region, setRegion] = useState('');
   const [city, setCity] = useState('');
   const [sort, setSort] = useState('');
@@ -62,6 +56,7 @@ export default function App() {
   const [explainOpen, setExplainOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [notes, setNotes] = useState({});
+  const [showcase, setShowcase] = useState([]);
 
   const narrow = useNarrow();
   const settledQuery = useDebounced(query, 350);
@@ -74,7 +69,8 @@ export default function App() {
       .then((answer) => {
         if (!alive) return;
         setMeta(answer);
-        setCat(answer.defaults.category);
+        setCats(answer.defaults.category && answer.defaults.category !== 'all'
+          ? [answer.defaults.category] : []);
         setRegion(answer.defaults.region);
         setCity(answer.defaults.city);
         setSort(answer.defaults.sort);
@@ -84,6 +80,7 @@ export default function App() {
         setWeights(found ? found.weights : {});
         setStats(answer.stats);
         setStatusState(answer.status);
+        setShowcase(answer.showcase || []);
       })
       .catch((e) => {
         if (!alive) return;
@@ -105,7 +102,7 @@ export default function App() {
 
   const filters = useMemo(() => ({
     q: settledQuery.trim(),
-    category: cat,
+    category: cats.join(','),
     region,
     city,
     kinds: kinds.join(','),
@@ -116,18 +113,20 @@ export default function App() {
     preset,
     weights: weightsToString(weights),
     sort,
-  }), [settledQuery, cat, region, city, kinds, onlyDocs, onlyVerified, onlyContacts,
+  }), [settledQuery, cats, region, city, kinds, onlyDocs, onlyVerified, onlyContacts,
     statusFilter, preset, weights, sort]);
 
-  const preselect = (list) => {
+  // первый заход открывается с готовым примером сравнения — парой поставщиков одного продукта
+  useEffect(() => {
+    if (!showcase.length) return;
     try {
       if (localStorage.getItem('provizia_seen')) return;
       localStorage.setItem('provizia_seen', '1');
-      setCompare(list.slice(0, 2).map((s) => s.id));
     } catch (error) {
-      setCompare(list.slice(0, 2).map((s) => s.id));
+      // приватный режим: пример всё равно показываем
     }
-  };
+    setCompare(showcase.slice(0, 2).map((s) => s.id));
+  }, [showcase]);
 
   const load = useCallback(
     (nextPage, append) => {
@@ -152,7 +151,6 @@ export default function App() {
           setRelax(answer.relax || []);
           setLoading(false);
           setLoadingMore(false);
-          if (!append) preselect(answer.items);
         })
         .catch((e) => {
           if (!alive) return;
@@ -221,17 +219,23 @@ export default function App() {
   const selected = items.find((s) => s.id === selId)
     || calls.find((s) => s.id === selId) || null;
   const compareItems = compare
-    .map((id) => items.find((s) => s.id === id) || calls.find((s) => s.id === id))
+    .map((id) => items.find((s) => s.id === id)
+      || calls.find((s) => s.id === id)
+      || showcase.find((s) => s.id === id))
     .filter(Boolean);
   const anyFilter = Boolean(query) || onlyDocs || onlyVerified || onlyContacts || statusFilter
-    || (meta && (cat !== meta.defaults.category || region !== meta.defaults.region
-      || city !== meta.defaults.city || sort !== meta.defaults.sort
-      || kinds.join(',') !== meta.defaults.kinds.join(',')));
+    || cats.length > 0
+    || (meta && (region !== meta.defaults.region || city !== meta.defaults.city
+      || sort !== meta.defaults.sort || kinds.join(',') !== meta.defaults.kinds.join(',')));
 
   const toggleCompare = (id) => setCompare((prev) => (
     prev.includes(id)
       ? prev.filter((x) => x !== id)
       : prev.length >= MAX_COMPARE ? prev : [...prev, id]
+  ));
+
+  const toggleCat = (id) => setCats((prev) => (
+    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
   ));
 
   const toggleKind = (id) => setKinds((prev) => (
@@ -241,7 +245,7 @@ export default function App() {
   const resetAll = () => {
     if (!meta) return;
     setQuery('');
-    setCat(meta.defaults.category);
+    setCats([]);
     setRegion(meta.defaults.region);
     setCity(meta.defaults.city);
     setSort(meta.defaults.sort);
@@ -273,7 +277,7 @@ export default function App() {
     else if (key === 'only_contacts') setOnlyContacts(false);
     else if (key === 'kinds') setKinds(meta.kinds.map((k) => k.id));
     else if (key === 'query') setQuery('');
-    else if (key === 'category') setCat(meta.labels ? 'all' : 'all');
+    else if (key === 'category') setCats([]);
     else if (key === 'city') setCity(meta.defaults.city);
     else if (key === 'region') setRegion(meta.labels.anyRegion);
     else if (key === 'status') setStatusFilter('');
@@ -298,7 +302,7 @@ export default function App() {
 
   const activeFilters = [
     query, onlyDocs, onlyVerified, onlyContacts, statusFilter,
-    meta && cat !== meta.defaults.category,
+    cats.length > 0,
     meta && kinds.join(',') !== meta.defaults.kinds.join(','),
   ].filter(Boolean).length;
   const presetTitle = ((meta && meta.presets) || []).find((p) => p.id === preset)?.title || '';
@@ -317,7 +321,7 @@ export default function App() {
         <div className="wrap header__in">
           <div className="brand">
             <Logo />
-            <span className="brand__name">Провизия</span>
+            <span className="brand__name">Goulash Поставщиков</span>
           </div>
           <div className="header__found">Найдено: <b>{loading ? '…' : total}</b></div>
           <button type="button" className="btn-compare" onClick={openCalls}>
@@ -341,19 +345,7 @@ export default function App() {
             <i />
             <span>{badge()}</span>
           </div>
-          <h1>Кому из поставщиков звонить первым</h1>
-
-          <div className="steps">
-            {STEPS.map((s, i) => (
-              <div className="step" key={s.n} style={{ animationDelay: `${0.06 * (i + 1) + 0.04}s` }}>
-                <div className="step__head">
-                  <span className="step__n" style={{ background: s.color }}>{s.n}</span>
-                  <span className="step__title">{s.title}</span>
-                </div>
-                <p>{s.text}</p>
-              </div>
-            ))}
-          </div>
+          <h1>Поиск поставщиков</h1>
 
           <div className="search">
             <div className="search__row">
@@ -383,11 +375,6 @@ export default function App() {
                 open={menu === 'city'} onToggle={(v) => setMenu(v ? 'city' : null)}
                 onSelect={setCity}
               />
-              <Dropdown
-                label="Сортировка" value={sort || '—'} options={(meta && meta.sorts) || []}
-                open={menu === 'sort'} onToggle={(v) => setMenu(v ? 'sort' : null)}
-                onSelect={setSort}
-              />
             </div>
 
           </div>
@@ -407,12 +394,12 @@ export default function App() {
               <button type="button" className="panel__close" onClick={() => setFiltersOpen(false)}>✕</button>
             </div>
             <FiltersPanel
-              meta={meta} preset={preset} cat={cat} kinds={kinds}
+              meta={meta} preset={preset} cats={cats} kinds={kinds}
               onlyDocs={onlyDocs} onlyVerified={onlyVerified} onlyContacts={onlyContacts}
               facets={facets} anyFilter={anyFilter}
               onPreset={changePreset}
               onExplain={() => { setExplainOpen(true); setFiltersOpen(false); }}
-              onCat={setCat} onKind={toggleKind}
+              onCat={toggleCat} onAllCats={() => setCats([])} onKind={toggleKind}
               onDocs={() => setOnlyDocs((v) => !v)}
               onVerified={() => setOnlyVerified((v) => !v)}
               onContacts={() => setOnlyContacts((v) => !v)}
@@ -430,6 +417,13 @@ export default function App() {
               <div className="results__count">
                 {loading ? 'Подбираем…' : `Найдено ${total}`}
                 {presetTitle ? <span className="results__preset">{presetTitle}</span> : null}
+              </div>
+              <div className="results__sort">
+                <Dropdown
+                  label="Сортировка" value={sort || '—'} options={(meta && meta.sorts) || []}
+                  open={menu === 'sort'} onToggle={(v) => setMenu(v ? 'sort' : null)}
+                  onSelect={setSort}
+                />
               </div>
             </div>
 

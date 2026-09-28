@@ -97,9 +97,7 @@ def filters(
     weights: str = Query(""),
     sort: str = Query(catalog.SORTS[0]),
 ) -> Filters:
-    chosen_category = "" if category in ("", catalog.ANY) else category
-    if chosen_category and catalog.category(chosen_category) is None:
-        raise HTTPException(400, f"Неизвестная категория «{category}»")
+    chosen_category = _categories(category)
 
     chosen_city = "" if city in ("", catalog.ANY, catalog.ANY_CITY_TITLE) else city
     if chosen_city and catalog.city(chosen_city) is None:
@@ -122,6 +120,14 @@ def filters(
 
 
 Query_ = Depends(filters)
+
+
+def _categories(raw: str) -> str:
+    chosen = [item for item in (raw or "").split(",") if item and item != catalog.ANY]
+    unknown = [item for item in chosen if catalog.category(item) is None]
+    if unknown:
+        raise HTTPException(400, f"Неизвестная категория «{unknown[0]}»")
+    return ",".join(chosen)
 
 
 def weights_of(preset: str, raw: str) -> dict:

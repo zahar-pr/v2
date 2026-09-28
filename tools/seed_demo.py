@@ -9,6 +9,7 @@ sys.path.insert(
 import index
 import store
 import team
+from db import connect
 
 TEAM = (
     ("demo-irina", "Ирина Ковалёва"),
@@ -58,12 +59,59 @@ STATUS_PLAN = (
 
 
 def pick(rows, count):
-
     return rows[:count], rows[count:]
+
+
+def wipe():
+    """Сид запускается сколько угодно раз: прошлую демо-активность убираем."""
+    marks = tuple(user for user, _ in TEAM)
+    holders = ", ".join("?" for _ in marks)
+    connection = connect()
+    connection.execute(f"DELETE FROM comments WHERE user_id IN ({holders})", marks)
+    connection.execute(f"DELETE FROM notes WHERE user_id IN ({holders})", marks)
+    connection.execute(f"DELETE FROM pipeline WHERE user_id IN ({holders})", marks)
+    names = tuple(author for _, author in TEAM)
+    connection.execute(
+        f"DELETE FROM checks WHERE author IN ({', '.join('?' for _ in names)})", names
+    )
+    connection.execute("UPDATE suppliers SET comments_count = 0, comments_rating = NULL")
+    connection.commit()
+
+
+SHOWCASE_NOTES = (
+    "Сравниваем с действующим поставщиком: цена ниже на 6%, возят через день.",
+    "Запросили КП на месяц и образцы, по документам всё прислали сразу.",
+)
+SHOWCASE_COMMENTS = (
+    ("Отгружают ровно по графику, за два месяца ни одного срыва.", 5),
+    ("Прайс присылают в день запроса, менеджер один и тот же.", 5),
+    ("Минимальный заказ крупноват для одной точки, берём на две.", 3),
+)
+
+
+def fill_showcase():
+    """Пара поставщиков одного продукта, с которой открывается «Сравнить»."""
+    rows = [row for row in store.get_many(store.showcase()) if row]
+    for number, row in enumerate(rows):
+        user, author = TEAM[number % len(TEAM)]
+        team.set_status(user, author, row["id"], ("quoted", "calling")[number % 2])
+        team.save_note(user, author, row["id"], SHOWCASE_NOTES[number % len(SHOWCASE_NOTES)])
+        for shift, (text, rating) in enumerate(SHOWCASE_COMMENTS):
+            mate, name = TEAM[(number + shift + 1) % len(TEAM)]
+            team.add_comment(mate, row["id"], name, text, rating)
+        questions = [
+            question
+            for factor in index.scoring.evaluate(index.scoring.with_age(row)).values()
+            for question in factor["ask"]
+        ]
+        for question in questions[:3]:
+            team.set_check(row["id"], question, True, author)
+    return rows
 
 
 def main():
     random.seed(20260919)
+    wipe()
     defaults = store.best_defaults()
     rows, total, _ = store.search(
         region=defaults["region"],
@@ -138,12 +186,15 @@ def main():
             team.set_check(row["id"], question, True, author)
             checks += 1
 
-    for row in pool:
+    shown = fill_showcase()
+
+    for row in [*pool, *shown]:
         fresh = store.get(row["id"])
         if fresh:
             index.score_one(fresh)
 
     print(f"статусов: {touched}, заметок: {notes}, комментариев: {comments}, отметок: {checks}")
+    print("пара для сравнения:", ", ".join(row["name"] for row in shown))
     print("счётчики по статусам:", team.status_counts())
 
 

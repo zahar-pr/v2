@@ -128,3 +128,29 @@ def haystack(supplier: dict) -> str:
         " ".join(supplier.get("cats_titles", [])),
     ]
     return " ".join(part for part in parts if part).lower()
+
+
+NEIGHBOURS = {"77": {"50"}, "50": {"77"}, "78": {"47"}, "47": {"78"}}
+GENERIC_NAME = re.compile(
+    r"хлебозавод|хлебокомбинат|мясокомбинат|молокозавод|молочный комбинат|"
+    r"птицефабрика|агрокомплекс|комбинат|фабрика|завод|пекарня|кондитерская|"
+    r"торговый дом|компания|продукты|база|цех|ферма|№|\d",
+    re.I,
+)
+
+
+def distinctive(name: str) -> bool:
+    """Есть ли в названии что-то своё, кроме «хлебозавод №3» и прочих общих слов."""
+    rest = GENERIC_NAME.sub(" ", name or "")
+    return len(re.sub(r"[^а-яёa-z]", "", rest.lower())) >= 5
+
+
+def same_region(inn: str | None, region_code: str) -> bool:
+    """Первые две цифры ИНН — код налогового региона: отсекает тёзок из других краёв."""
+    if not region_code:
+        return True
+    digits = "".join(ch for ch in (inn or "") if ch.isdigit())
+    if len(digits) < 10:
+        return True
+    code = region_code.zfill(2)
+    return digits[:2] == code or digits[:2] in NEIGHBOURS.get(code, ())

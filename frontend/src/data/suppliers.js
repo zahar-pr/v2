@@ -64,9 +64,15 @@ export const COMPARE_ROWS = [
   },
   {
     label: 'Оценка в справочниках',
-    get: (s) => (ratingOf(s) ? `${s.rating} из 5 · ${s.reviewsSource}` : 'не найдена'),
+    get: (s) => {
+      const found = ratingOf(s);
+      if (!found) return 'нет в подключённых источниках';
+      const count = found.reviews
+        ? ` по ${found.reviews} ${plural(found.reviews, 'отзыву', 'отзывам', 'отзывам')}`
+        : '';
+      return `${found.rating} из 5 · ${found.source}${count}`;
+    },
   },
-  { label: 'Отзывы', get: (s) => (ratingOf(s) ? `${s.rating} из 5 по ${s.reviews} отзывам` : 'нет в подключённых источниках') },
   { label: 'Статус в ФНС', get: (s) => dash(s.legalStatus) },
   { label: 'ОКВЭД', get: (s) => dash([s.okved, s.okvedName].filter(Boolean).join(' ')) },
   { label: 'Регион работы', get: (s) => dash(s.geo || s.region) },
