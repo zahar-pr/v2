@@ -197,22 +197,22 @@ def load_blocked(path: str) -> list[tuple[dict, dict]]:
     return out
 
 
-def mark_existing(rows: list[tuple[dict, dict]], skip_retail: bool) -> int:
-    """Если компания уже в базе под своим именем — метим её, а не плодим дубль.
+def mark_existing(rows: list[tuple[dict, dict]]) -> int:
+    """Метит уже имеющиеся в индексе карточки той же компании.
 
-    Фирменные магазины бренда (`retail`) зелёными не метим: это торговые точки, а не
-    поставщики сетей. Санкции, наоборот, видны везде, где компания встречается.
+    Делается только для санкций: об опасном поставщике надо предупредить везде, где он
+    встречается. Зелёные так не метим — у бренда в индексе бывает десяток филиалов и
+    магазинов, и выдача превратилась бы в стену из одинаковых названий. Проверенного
+    поставщика представляет одна кураторская карточка.
     """
     connection = connect()
     touched = 0
     for row, extra in rows:
         found = connection.execute(
-            "SELECT id, kind_class FROM suppliers WHERE name_key = ? AND id != ?",
+            "SELECT id FROM suppliers WHERE name_key = ? AND id != ?",
             (row["name_key"], row["id"]),
         ).fetchall()
         for item in found:
-            if skip_retail and item["kind_class"] == "retail":
-                continue
             store.save_enrichment(item["id"], extra)
             touched += 1
     return touched
@@ -226,7 +226,7 @@ def main() -> None:
         store.save_indexed([row for row, _ in rows])
         for row, extra in rows:
             store.save_enrichment(row["id"], extra)
-        also = mark_existing(rows, skip_retail=title == "сетевые")
+        also = mark_existing(rows) if title == "неблагонадёжные" else 0
         print(f"{title}: занесено {len(rows)}, помечено уже бывших в базе {also}")
 
     for _, rows in batches:
