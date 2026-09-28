@@ -155,7 +155,16 @@ NULLABLE_FIELDS = ("lat", "lon", "distance_km")
 NUMERIC_FIELDS = ("wholesale", "branches", "checked_at")
 
 
-JSON_FIELDS = ("phones", "emails", "certs", "sources", "socials", "clients", "incident")
+JSON_FIELDS = (
+    "phones",
+    "emails",
+    "certs",
+    "sources",
+    "socials",
+    "clients",
+    "products",
+    "incident",
+)
 
 
 ADDED_COLUMNS = (
@@ -190,6 +199,7 @@ ADDED_COLUMNS = (
     ("trust_note", "TEXT NOT NULL DEFAULT ''"),
     ("clients", "TEXT NOT NULL DEFAULT '[]'"),
     ("incident", "TEXT NOT NULL DEFAULT '[]'"),
+    ("products", "TEXT NOT NULL DEFAULT '[]'"),
 )
 
 

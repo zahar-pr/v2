@@ -96,11 +96,36 @@ export default function SupplierPanel({
             {s.trustTier && (
               <div className={`verdictbox verdictbox--${s.trustTier}`}>
                 <div className="verdictbox__title">
-                  {s.trustTier === 'trusted'
-                    ? 'Проверенный поставщик сетей'
-                    : 'Не рекомендуем к работе'}
+                  {s.trustTier === 'trusted' ? s.verdict : 'Не рекомендуем к работе'}
                 </div>
+
+                {s.clients.length > 0 && (
+                  <div className="verdictbox__part">
+                    <div className="verdictbox__label">Поставляет сетям</div>
+                    <div className="chainlist">
+                      {s.clients.map((chain) => (
+                        <span className="chain" key={chain}>{chain}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {s.products.length > 0 && (
+                  <div className="verdictbox__part">
+                    <div className="verdictbox__label">Что именно возит</div>
+                    <div className="verdictbox__value">{s.products.join(', ')}</div>
+                  </div>
+                )}
+
+                {s.geo && (
+                  <div className="verdictbox__part">
+                    <div className="verdictbox__label">География поставок</div>
+                    <div className="verdictbox__value">{s.geo}</div>
+                  </div>
+                )}
+
                 <p className="verdictbox__text">{s.trustNote}</p>
+
                 {s.trustTier === 'blocked' && s.incident.risk && (
                   <div className="verdictbox__meta">
                     Риск: {s.incident.risk.toLowerCase()}
@@ -108,16 +133,17 @@ export default function SupplierPanel({
                     {s.incident.chain ? ` · сеть «${s.incident.chain}»` : ''}
                   </div>
                 )}
-                {s.clients.length > 0 && (
-                  <div className="verdictbox__meta">Клиенты: {s.clients.join(', ')}</div>
-                )}
+
                 {s.sources.length > 0 && (
-                  <div className="verdictbox__links">
-                    {s.sources.map((item) => (
-                      <a key={item.url} href={item.url} target="_blank" rel="noreferrer">
-                        {item.title} ↗
-                      </a>
-                    ))}
+                  <div className="verdictbox__part">
+                    <div className="verdictbox__label">Чем подтверждается</div>
+                    <div className="verdictbox__links">
+                      {s.sources.map((item) => (
+                        <a key={item.url} href={item.url} target="_blank" rel="noreferrer">
+                          {item.title} ↗
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

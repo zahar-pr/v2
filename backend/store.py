@@ -81,6 +81,7 @@ ENRICHED_FIELDS = (
     "trust_tier",
     "trust_note",
     "clients",
+    "products",
     "incident",
 )
 
@@ -128,6 +129,11 @@ def priority_sql(weights: dict) -> str:
     return f"(({' + '.join(parts)}) / {total or 1}.0)"
 
 
+# Проверенные поставщики сетей идут первыми при любой сортировке, компании с
+# санкциями надзора — последними: это вывод, а не один из факторов балла.
+TRUST_ORDER = "CASE trust_tier WHEN 'trusted' THEN 0 WHEN 'blocked' THEN 2 ELSE 1 END ASC"
+
+
 def sort_sql(sort: str, weights: dict) -> str:
     priority = priority_sql(weights)
     options = {
@@ -136,7 +142,7 @@ def sort_sql(sort: str, weights: dict) -> str:
         "По минимальному заказу": f"moq_value IS NULL, moq_value ASC, {priority} DESC",
         "По названию": "name COLLATE NOCASE ASC",
     }
-    return options.get(sort, options["По приоритету"])
+    return f"{TRUST_ORDER}, " + options.get(sort, options["По приоритету"])
 
 
 def save_indexed(items: list[dict]) -> int:
@@ -637,9 +643,10 @@ FULLNESS = " + ".join(
 )
 
 
-# Пара, с которой открывается «Сравнить». Если кого-то из них нет в индексе, берём
-# самую заполненную пару одного продукта, какую найдём.
-PINNED = ("алябьевскийхлебозавод", "первыйхлебокомбинат")
+# Пара, с которой открывается «Сравнить»: один город, один продукт, у обоих реквизиты,
+# руководитель и телефон — видно, что сравниваются все строки. Если кого-то из них нет
+# в индексе, берём самую заполненную пару одного продукта, какую найдём.
+PINNED = ("хлебозавод2", "донскиепекарни")
 
 
 def showcase(size: int = 2) -> list[str]:

@@ -97,6 +97,8 @@ rows = [
         distance_km=55.0,
     ),
     row(id="d", name="Тихий Цех", distance_km=8.0),
+    row(id="t", name="Сетевой Поставщик", phones=["+7 843 444-44-44"], distance_km=7.0),
+    row(id="x", name="Закрытый Цех", phones=["+7 843 555-55-55"], distance_km=9.0),
 ]
 store.save_indexed(rows)
 store.save_enrichment(
@@ -124,22 +126,6 @@ store.save_enrichment(
 )
 store.set_verified("a", True, "контакты подтверждены на сайте поставщика")
 store.save_enrichment("c", {"delivery": "ТК по России", "geo": "Вся Россия"})
-store.save_enrichment(
-    "b",
-    {
-        "trust_tier": "trusted",
-        "trust_note": "Поставляет для: Burger King.",
-        "clients": ["Burger King"],
-    },
-)
-store.save_enrichment(
-    "c",
-    {
-        "trust_tier": "blocked",
-        "trust_note": "Приостановка 60 суток.",
-        "incident": {"risk": "Высокий", "sanction": "Приостановка 60 суток"},
-    },
-)
 for item in store.unscored(50):
     index.score_one(item)
 
@@ -240,7 +226,7 @@ check(
 )
 check(
     "фильтр контактов",
-    client.get("/api/suppliers", params={"onlyContacts": "true"}).json()["total"] == 3,
+    client.get("/api/suppliers", params={"onlyContacts": "true"}).json()["total"] == 5,
 )
 check(
     "поиск по строке", client.get("/api/suppliers", params={"q": "оптбаза"}).json()["total"] == 1
@@ -250,32 +236,53 @@ check(
     client.get("/api/suppliers", params={"sort": "По расстоянию"}).json()["items"][0]["id"] == "b",
 )
 paged = client.get("/api/suppliers", params={"perPage": 2, "page": 2}).json()
-check("пагинация", paged["page"] == 2 and paged["pages"] == 2)
+check("пагинация", paged["page"] == 2 and paged["pages"] == 3)
 facets = client.get("/api/suppliers").json()["facets"]
-check("фасеты: типы", facets["types"]["producer"] == 2)
-check("фасеты: категории", facets["cats"]["bakery"] == 3 and facets["cats"]["wholesale"] == 1)
+check("фасеты: типы", facets["types"]["producer"] == 4)
+check("фасеты: категории", facets["cats"]["bakery"] == 5 and facets["cats"]["wholesale"] == 1)
 check(
     "фасеты категорий не зависят от выбранной категории",
     client.get("/api/suppliers", params={"category": "wholesale"}).json()["facets"]["cats"][
         "bakery"
     ]
-    == 3,
+    == 5,
 )
 check(
     "несколько категорий разом",
-    client.get("/api/suppliers", params={"category": "bakery,wholesale"}).json()["total"] == 4,
+    client.get("/api/suppliers", params={"category": "bakery,wholesale"}).json()["total"] == 6,
 )
 
+# кураторские метки ставим здесь, чтобы не сдвигать порядок в тестах выше
+store.save_enrichment(
+    "t",
+    {
+        "trust_tier": "trusted",
+        "trust_note": "Поставляет для: Burger King.",
+        "clients": ["Burger King"],
+        "products": ["котлеты"],
+    },
+)
+store.save_enrichment(
+    "x",
+    {
+        "trust_tier": "blocked",
+        "trust_note": "Приостановка 60 суток.",
+        "incident": {"risk": "Высокий", "sanction": "Приостановка 60 суток"},
+    },
+)
+for item in ("t", "x"):
+    index.score_one(store.get(item))
+
 cards = {item["id"]: item for item in client.get("/api/suppliers").json()["items"]}
-check("проверенный поставщик: балл 100", cards["b"]["score"] == 100, cards["b"]["score"])
-check("проверенный поставщик: вердикт", cards["b"]["level"] == "trusted", cards["b"]["level"])
-check("проверенный поставщик: клиенты", cards["b"]["clients"] == ["Burger King"])
-check("санкции надзора: балл 0", cards["c"]["score"] == 0, cards["c"]["score"])
-check("санкции надзора: вердикт", cards["c"]["level"] == "blocked", cards["c"]["level"])
+check("проверенный поставщик: балл 100", cards["t"]["score"] == 100, cards["t"]["score"])
+check("проверенный поставщик: вердикт", cards["t"]["level"] == "trusted", cards["t"]["level"])
+check("проверенный поставщик: клиенты", cards["t"]["clients"] == ["Burger King"])
+check("санкции надзора: балл 0", cards["x"]["score"] == 0, cards["x"]["score"])
+check("санкции надзора: вердикт", cards["x"]["level"] == "blocked", cards["x"]["level"])
 check(
     "санкции надзора: причина видна",
-    "Приостановка" in cards["c"]["incident"].get("sanction", ""),
-    cards["c"]["incident"],
+    "Приостановка" in cards["x"]["incident"].get("sanction", ""),
+    cards["x"]["incident"],
 )
 check(
     "репутация весит больше всех в «Сбалансировано»",
@@ -290,6 +297,26 @@ check(
     "пресет переименован",
     scoring.PRESETS["balanced"]["title"] == "Сбалансировано",
     scoring.PRESETS["balanced"]["title"],
+)
+
+order = client.get("/api/suppliers").json()["items"]
+check(
+    "проверенные идут первыми",
+    [item["id"] for item in order][:1] == ["t"],
+    [(i["id"], i["level"]) for i in order],
+)
+by_name = client.get(
+    "/api/suppliers?sort=%D0%9F%D0%BE%20%D0%BD%D0%B0%D0%B7%D0%B2%D0%B0%D0%BD%D0%B8%D1%8E"
+).json()["items"]
+check(
+    "проверенные первыми и при сортировке по названию",
+    by_name[0]["id"] == "t" and by_name[-1]["id"] == "x",
+    [(i["id"], i["name"]) for i in by_name],
+)
+check(
+    "вердикт без названных сетей честнее",
+    scoring.verdict_of(100, {"trust_tier": "trusted", "clients": []})[1]
+    == "Крупный поставщик HoReCa",
 )
 
 css = (ROOT / "frontend" / "src" / "styles" / "global.css").read_text()
@@ -335,14 +362,17 @@ check(
 )
 
 client.post("/api/notes", json={"supplierId": "a", "text": "Ждём КП до 25.09"})
-team = other.get("/api/suppliers").json()["items"][0]
+team = next(i for i in other.get("/api/suppliers").json()["items"] if i["id"] == "a")
 check("заметка видна команде", team["note"] == "Ждём КП до 25.09")
 check("автор заметки", team["noteAuthor"] == "Захар")
 
 client.post("/api/checks", json={"supplierId": "a", "question": "Запросить прайс", "done": True})
 check(
     "чек-лист командный",
-    "Запросить прайс" in other.get("/api/suppliers").json()["items"][0]["checksDone"],
+    "Запросить прайс"
+    in next(i for i in other.get("/api/suppliers").json()["items"] if i["id"] == "a")[
+        "checksDone"
+    ],
 )
 
 posted = client.post(
@@ -363,7 +393,7 @@ check(
     client.post("/api/comments", json={"supplierId": "a", "text": "x", "rating": 9}).status_code
     == 400,
 )
-fresh = client.get("/api/suppliers").json()["items"][0]
+fresh = next(i for i in client.get("/api/suppliers").json()["items"] if i["id"] == "a")
 check("оценка команды в карточке", fresh["commentsRating"] == 4.5 and fresh["commentsCount"] == 2)
 reputation = next(f for f in fresh["factors"] if f["id"] == "reputation")
 check(
@@ -383,7 +413,7 @@ store.save_enrichment(
 )
 for item in store.unscored(50):
     index.score_one(item)
-with_reviews = client.get("/api/suppliers").json()["items"][0]
+with_reviews = next(i for i in client.get("/api/suppliers").json()["items"] if i["id"] == "a")
 check("оценка справочника в карточке", with_reviews["reviewsSource"] == "Zoon")
 rep_now = next(f for f in with_reviews["factors"] if f["id"] == "reputation")
 check(
@@ -423,8 +453,8 @@ client.post("/api/pipeline", json={"supplierId": "a", "status": ""})
 rec = client.post("/api/compare/recommend", json={"ids": ["a", "d"]}).json()
 check("сравнение: лучший", rec["bestId"] == "a", rec.get("bestId"))
 
-curated = client.post("/api/compare/recommend", json={"ids": ["b", "a", "c"]}).json()
-check("сравнение: проверенный впереди", curated["bestId"] == "b", curated.get("bestId"))
+curated = client.post("/api/compare/recommend", json={"ids": ["t", "a", "x"]}).json()
+check("сравнение: проверенный впереди", curated["bestId"] == "t", curated.get("bestId"))
 check("сравнение: объяснение", len(rec["diff"]) > 0 and rec["diff"][0]["factor"])
 
 csv_answer = client.get("/api/export.csv")

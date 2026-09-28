@@ -241,6 +241,7 @@ def _trust(row: dict) -> dict:
         "trustTier": row.get("trust_tier") or "",
         "trustNote": row.get("trust_note") or "",
         "clients": row.get("clients") or [],
+        "products": row.get("products") or [],
         "incident": row.get("incident") or {},
     }
 

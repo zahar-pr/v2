@@ -153,6 +153,7 @@ def load_trusted(path: str) -> list[tuple[dict, dict]]:
             "trust_tier": "trusted",
             "trust_note": note,
             "clients": item.get("known_clients") or [],
+            "products": item.get("products") or [],
             "geo": ", ".join(r for r in (item.get("regions") or []) if r and r != "—"),
             "sources": row["sources"],
         }

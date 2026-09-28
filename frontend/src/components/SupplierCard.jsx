@@ -29,7 +29,9 @@ export default function SupplierCard({
     >
       <div className="row__main">
         {s.trustTier === 'trusted' && (
-          <div className="mark mark--trusted">Проверенный поставщик сетей</div>
+          <div className="mark mark--trusted">
+            {s.clients.length ? `Поставщик сетей: ${s.clients.join(', ')}` : s.verdict}
+          </div>
         )}
         {s.trustTier === 'blocked' && (
           <div className="mark mark--blocked">

@@ -153,7 +153,8 @@ def total(scores: dict, weights: dict, supplier: dict | None = None) -> int:
 def verdict_of(score: int, supplier: dict | None = None) -> tuple[str, str]:
     tier = (supplier or {}).get("trust_tier") or ""
     if tier == TRUSTED:
-        return "trusted", "Проверенный поставщик сетей"
+        named = (supplier or {}).get("clients") or []
+        return "trusted", "Проверенный поставщик сетей" if named else "Крупный поставщик HoReCa"
     if tier == BLOCKED:
         return "blocked", "Не рекомендуем: санкции надзора"
     return next((level, text) for limit, level, text in VERDICTS if score >= limit)
@@ -206,7 +207,10 @@ def _rate_curated(tally: Tally, s: dict) -> None:
     clients = s.get("clients") or []
     if tier == TRUSTED:
         where = ", ".join(clients[:3])
-        tally.add(60, f"поставщик сетей: {where}" if where else "проверенный поставщик HoReCa")
+        tally.add(
+            60,
+            f"поставщик сетей: {where}" if where else "крупный федеральный поставщик HoReCa",
+        )
     elif tier == BLOCKED:
         trouble = (s.get("incident") or {}).get("sanction") or "санкции надзора"
         tally.lack(

@@ -845,15 +845,15 @@ td.cell--muted { color: var(--text-2); }
 
 /* ---------- список поставщиков ---------- */
 
-.list { display: flex; flex-direction: column; }
-.list > * + * { border-top: 1px solid var(--line-hair); }
+.list { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
 
 .row {
-  display: flex; gap: 18px; padding: 16px 18px;
+  display: flex; gap: 20px; padding: 18px 20px;
+  border: 1px solid var(--line-hair); border-radius: var(--r-m);
   animation: heroin 0.4s var(--ease) both;
   transition: background 0.15s ease;
 }
-.row:hover { background: var(--surface-2); }
+.row:hover { background: var(--surface-2); border-color: var(--line); }
 .row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 
 .row__name {
@@ -975,6 +975,7 @@ td.cell--muted { color: var(--text-2); }
   .more { padding: 12px 14px; }
   .more .btn { flex: 1 1 calc(50% - 5px); }
 
+  .list { gap: 8px; padding: 8px; }
   .row { flex-direction: column; gap: 12px; padding: 16px 14px; }
   .row__name { font-size: 17px; }
   .row__side {
@@ -1006,19 +1007,29 @@ td.cell--muted { color: var(--text-2); }
 
 /* ---------- кураторские метки: поставщики сетей и санкции надзора ---------- */
 
-.row--trusted { background: var(--good-row); box-shadow: inset 3px 0 0 var(--mint); }
+.row--trusted {
+  background: var(--good-row); border-color: var(--mint);
+  box-shadow: inset 3px 0 0 var(--mint);
+}
 .row--trusted:hover { background: var(--good-row-2); }
-.row--blocked { background: var(--bad-row); box-shadow: inset 3px 0 0 var(--bad); }
+.row--blocked {
+  background: var(--bad-row); border-color: var(--bad);
+  box-shadow: inset 3px 0 0 var(--bad);
+}
 .row--blocked:hover { background: var(--bad-row-2); }
 
 .mark {
-  align-self: flex-start; padding: 3px 10px; border-radius: var(--pill);
+  align-self: flex-start; max-width: 100%; padding: 3px 10px; border-radius: var(--pill);
   font-size: 12px; font-weight: 500; letter-spacing: 0.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .mark--trusted { background: var(--mint); color: var(--deep); }
 .mark--blocked { background: var(--bad); color: var(--on-bad); }
 
-.row__note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.row__note {
+  margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-2);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
 .row--blocked .row__note { color: var(--bad-ink); }
 
 .prio--trusted { background: var(--mint); color: var(--deep); }
@@ -1124,3 +1135,17 @@ td.cell--muted { color: var(--text-2); }
 }
 .theme:hover { background: rgba(255, 255, 255, 0.16); border-color: var(--cyan); }
 .theme svg { display: block; }
+
+.verdictbox__part { margin-top: 11px; }
+.verdictbox__label {
+  font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3);
+}
+.verdictbox--blocked .verdictbox__label { color: var(--bad-ink); opacity: 0.75; }
+.verdictbox__value { margin-top: 3px; font-size: 14px; line-height: 1.5; color: var(--text-2); }
+.verdictbox--blocked .verdictbox__value { color: var(--bad-ink); }
+
+.chainlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.chain {
+  padding: 4px 11px; border-radius: var(--pill);
+  background: var(--mint); color: var(--deep); font-size: 13px; font-weight: 500;
+}
