@@ -414,6 +414,7 @@ export default function App() {
           </aside>
 
           <div className="results">
+           <div className="board">
             <div className="results__bar">
               <button type="button" className="filters__toggle" onClick={() => setFiltersOpen(true)}>
                 Фильтры{activeFilters ? ` · ${activeFilters}` : ''}
@@ -469,14 +470,16 @@ export default function App() {
             )}
 
             {loading && (
-              <div className="grid">
+              <div className="list">
                 {SKELETONS.map((i) => (
-                  <article className="card card--skel" key={i} style={{ animationDelay: `${i * 0.04}s` }}>
-                    <div className="skel skel--title" />
-                    <div className="skel skel--sub" />
-                    <div className="skel skel--tags" />
-                    <div className="skel skel--specs" />
-                    <div className="skel skel--bar" />
+                  <article className="row row--skel" key={i} style={{ animationDelay: `${i * 0.04}s` }}>
+                    <div className="row__main">
+                      <div className="skel skel--title" />
+                      <div className="skel skel--sub" />
+                      <div className="skel skel--tags" />
+                      <div className="skel skel--specs" />
+                    </div>
+                    <div className="row__side"><div className="skel skel--bar" /></div>
                   </article>
                 ))}
               </div>
@@ -492,7 +495,7 @@ export default function App() {
 
             {!loading && !error && items.length > 0 && (
               <>
-                <div className="grid">
+                <div className="list">
                   {items.map((s, i) => (
                     <SupplierCard
                       key={s.id} supplier={s} index={i % PER_PAGE}
@@ -547,6 +550,7 @@ export default function App() {
                 <button type="button" className="btn btn--cyan" onClick={resetAll}>Сбросить всё</button>
               </div>
             )}
+           </div>
           </div>
         </div>
       </section>
