@@ -339,7 +339,7 @@ export default function App() {
         <div className="wrap header__in">
           <div className="brand">
             <Logo />
-            <span className="brand__name">Goulash Поставщиков</span>
+            <span className="brand__name">Goulash Поставщики</span>
           </div>
           <div className="header__found">Найдено: <b>{loading ? '…' : total}</b></div>
           <ThemeToggle theme={theme} onToggle={toggleTheme} />

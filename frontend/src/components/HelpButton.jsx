@@ -7,11 +7,11 @@ export default function HelpButton({ onOpen }) {
       type="button"
       className="helper"
       onClick={onOpen}
-      title="Как читать выдачу: балл, зелёные и красные карточки"
-      aria-label="Как читать выдачу"
+      title="Система расчета: балл, зелёные и красные карточки"
+      aria-label="Система расчета"
     >
       <span className="helper__sign" aria-hidden="true">?</span>
-      <span className="helper__hint">Как читать выдачу</span>
+      <span className="helper__hint">Система расчета</span>
     </button>
   );
 }

@@ -60,7 +60,7 @@ export default function Intro({ weights, onDetails, onClose }) {
       <div className="modal__in modal__in--narrow">
         <div className="modal__sheet" ref={sheet}>
           <div className="modal__head">
-            <h2>Как читать выдачу</h2>
+            <h2>Система расчета</h2>
             <button type="button" className="btn btn--cyan" onClick={close}>Понятно</button>
           </div>
 
