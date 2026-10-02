@@ -319,6 +319,15 @@ check(
     == "Крупный поставщик HoReCa",
 )
 
+app_jsx = (ROOT / "frontend" / "src" / "App.jsx").read_text()
+intro_jsx = (ROOT / "frontend" / "src" / "components" / "Intro.jsx").read_text()
+check("памятка показывается один раз", "provizia_intro" in app_jsx)
+check("памятка берёт веса из меты, а не из текста", "weights[id]" in intro_jsx)
+check(
+    "памятка объясняет зелёные и красные",
+    "Зелёные" in intro_jsx and "Красные" in intro_jsx and "Роспотребнадзор" in intro_jsx,
+)
+
 css = (ROOT / "frontend" / "src" / "styles" / "global.css").read_text()
 check("тёмная тема объявлена", ":root[data-theme='dark']" in css)
 check("светлая и тёмная схемы для системных элементов", css.count("color-scheme") == 2)

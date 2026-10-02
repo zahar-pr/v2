@@ -8,6 +8,7 @@ import SupplierPanel from './components/SupplierPanel.jsx';
 import CompareModal from './components/CompareModal.jsx';
 import CallList from './components/CallList.jsx';
 import ScoreExplainer from './components/ScoreExplainer.jsx';
+import Intro from './components/Intro.jsx';
 import useNarrow from './hooks/useNarrow.js';
 import useTheme from './hooks/useTheme.js';
 import useDebounced from './hooks/useDebounced.js';
@@ -56,6 +57,7 @@ export default function App() {
   const [calls, setCalls] = useState({ working: [], suggest: [] });
   const [callsLoading, setCallsLoading] = useState(false);
   const [explainOpen, setExplainOpen] = useState(false);
+  const [introOpen, setIntroOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [notes, setNotes] = useState({});
   const [showcase, setShowcase] = useState([]);
@@ -118,6 +120,25 @@ export default function App() {
     sort,
   }), [settledQuery, cats, region, city, kinds, onlyDocs, onlyVerified, onlyContacts,
     statusFilter, preset, weights, sort]);
+
+  useEffect(() => {
+    if (!meta) return;
+    try {
+      if (localStorage.getItem('provizia_intro')) return;
+    } catch (error) {
+      return;
+    }
+    setIntroOpen(true);
+  }, [meta]);
+
+  const closeIntro = () => {
+    setIntroOpen(false);
+    try {
+      localStorage.setItem('provizia_intro', '1');
+    } catch (error) {
+      // приватный режим: памятка покажется снова
+    }
+  };
 
   // первый заход открывается с готовым примером сравнения — парой поставщиков одного продукта
   useEffect(() => {
@@ -600,6 +621,14 @@ export default function App() {
           onStatus={changeStatus}
           onOpen={(id) => { setSelId(id); setCallsOpen(false); }}
           onClose={() => setCallsOpen(false)}
+        />
+      )}
+
+      {introOpen && meta && (
+        <Intro
+          weights={meta.presets.find((p) => p.id === 'balanced').weights}
+          onDetails={() => { closeIntro(); setExplainOpen(true); }}
+          onClose={closeIntro}
         />
       )}
 

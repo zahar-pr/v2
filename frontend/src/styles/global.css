@@ -1149,3 +1149,39 @@ td.cell--muted { color: var(--text-2); }
   padding: 4px 11px; border-radius: var(--pill);
   background: var(--mint); color: var(--deep); font-size: 13px; font-weight: 500;
 }
+
+/* ---------- памятка на первый заход ---------- */
+
+.modal__in--narrow { max-width: 620px; }
+.modal__in--narrow .modal__sheet {
+  display: flex; flex-direction: column; max-height: calc(100vh - 56px);
+}
+.modal__in--narrow .modal__head { flex: none; }
+.modal__in--narrow .intro { overflow-y: auto; overscroll-behavior: contain; }
+
+.intro { padding: clamp(14px, 3vw, 20px) clamp(16px, 3.5vw, 24px) clamp(18px, 3.5vw, 24px); }
+.intro__item { padding: 14px 0; border-bottom: 1px solid var(--line-hair); }
+.intro__item:first-child { padding-top: 0; }
+.intro__item:last-of-type { border-bottom: none; }
+.intro__title {
+  margin: 0 0 5px; font-family: var(--font-display); font-size: 17px; letter-spacing: -0.02em;
+}
+.intro p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-2); }
+
+.intro__weights { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.intro__weight {
+  padding: 4px 11px; border-radius: var(--pill);
+  background: var(--field); color: var(--text-2); font-size: 13px;
+}
+.intro__weight b { color: var(--ink); font-weight: 600; }
+
+.intro__item--good { padding-left: 13px; box-shadow: inset 3px 0 0 var(--mint); }
+.intro__item--good .intro__title { color: var(--mint-ink); }
+.intro__item--bad { padding-left: 13px; box-shadow: inset 3px 0 0 var(--bad); }
+.intro__item--bad .intro__title { color: var(--bad-ink); }
+
+.intro__more {
+  margin-top: 16px; padding: 0; border: none; background: none; cursor: pointer;
+  color: var(--cyan-ink); font-size: 14px;
+}
+.intro__more:hover { color: var(--ink); }
