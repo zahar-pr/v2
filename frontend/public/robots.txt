@@ -1,0 +1,6 @@
+# Страницу и данные к ней роботам отдаём: без /api выдача не отрисуется в рендерере.
+# От индексации JSON защищает заголовок X-Robots-Tag, который ставит бэкенд.
+User-agent: *
+Allow: /
+
+Sitemap: https://provizia.onrender.com/sitemap.xml

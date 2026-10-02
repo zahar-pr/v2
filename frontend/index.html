@@ -4,14 +4,76 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Goulash Поставщики — поиск и сравнение поставщиков продуктов</title>
-    <meta name="description" content="Каталог поставщиков продуктов, ингредиентов и упаковки: минимальный заказ, цены, документы, доставка, контакты и сравнение до трёх компаний." />
+    <meta name="description" content="Поиск поставщиков продуктов по 79 городам России: приоритет звонка по шести факторам, реквизиты из ЕГРЮЛ и ФНС, отзывы, документы, сравнение компаний и список обзвона." />
+    <link rel="canonical" href="https://provizia.onrender.com/" />
+    <meta name="theme-color" content="#0a3440" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Goulash Поставщики" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:url" content="https://provizia.onrender.com/" />
+    <meta property="og:title" content="Goulash Поставщики — поиск и сравнение поставщиков продуктов" />
+    <meta property="og:description" content="Каталог поставщиков продуктов по 79 городам: приоритет звонка, реквизиты из ЕГРЮЛ и ФНС, отзывы, документы и сравнение компаний." />
+    <meta property="og:image" content="https://provizia.onrender.com/favicon.svg" />
+    <meta name="twitter:card" content="summary" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Goulash Поставщики",
+        "url": "https://provizia.onrender.com/",
+        "applicationCategory": "BusinessApplication",
+        "inLanguage": "ru",
+        "description": "Поиск и сравнение поставщиков продуктов питания для общепита: приоритет звонка по шести факторам, реквизиты из ЕГРЮЛ и ФНС, отзывы, документы, список обзвона.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "RUB" }
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      Внутри #root лежит текстовое описание сервиса. React затирает его при первом
+      рендере, но роботы, которые не выполняют JS (а Яндекс делает это неохотно),
+      видят здесь содержание страницы, а не пустой контейнер.
+    -->
+    <div id="root">
+      <main class="seo">
+        <h1>Goulash Поставщики — поиск поставщиков продуктов питания</h1>
+        <p>
+          Сервис помогает закупщику кафе и ресторана решить, кому звонить первым.
+          В базе поставщики продуктов из 79 городов России: производства, оптовые базы
+          и дистрибьюторы муки, мяса, рыбы, молочных продуктов, овощей, выпечки,
+          кондитерских изделий, напитков, заморозки, специй и упаковки.
+        </p>
+
+        <h2>Что показывает карточка поставщика</h2>
+        <ul>
+          <li>Приоритет звонка от 0 до 100 с раскладкой по шести факторам: репутация, опт и объёмы, связь, документы, логистика, достоверность данных.</li>
+          <li>Реквизиты юрлица из ЕГРЮЛ и сервиса ФНС «Прозрачный бизнес»: ИНН, ОГРН, руководитель, ОКВЭД, статус организации.</li>
+          <li>Телефоны, почту, сайт и адрес — с ссылкой на источник каждого факта.</li>
+          <li>Оценки и отзывы из справочников, комментарии команды, статусы работы с поставщиком.</li>
+        </ul>
+
+        <h2>Как пользоваться</h2>
+        <ul>
+          <li>Фильтры по городу, региону, категории продукта и типу поставщика.</li>
+          <li>Сравнение компаний по двум десяткам параметров в одной таблице.</li>
+          <li>Список обзвона: кто уже в работе и кого стоит добавить.</li>
+          <li>Выгрузка выдачи в CSV.</li>
+        </ul>
+
+        <p>
+          Данные собираются из открытых источников: OpenStreetMap, ЕГРЮЛ, ФНС,
+          сайты самих поставщиков и справочники отзывов. Ничего не выдумывается:
+          если поля нет в источниках, в карточке так и написано.
+        </p>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

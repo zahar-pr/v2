@@ -320,6 +320,7 @@ check(
 )
 
 app_jsx = (ROOT / "frontend" / "src" / "App.jsx").read_text()
+main_py = (ROOT / "backend" / "main.py").read_text()
 intro_jsx = (ROOT / "frontend" / "src" / "components" / "Intro.jsx").read_text()
 logos_jsx = (ROOT / "frontend" / "src" / "components" / "ClientLogos.jsx").read_text()
 help_jsx = (ROOT / "frontend" / "src" / "components" / "HelpButton.jsx").read_text()
@@ -331,6 +332,25 @@ check("памятка берёт веса из меты, а не из текст
 check(
     "памятка объясняет зелёные и красные",
     "Зелёные" in intro_jsx and "Красные" in intro_jsx and "Роспотребнадзор" in intro_jsx,
+)
+
+index_html = (ROOT / "frontend" / "index.html").read_text()
+check("есть robots.txt", (ROOT / "frontend" / "public" / "robots.txt").exists())
+check("есть карта сайта", (ROOT / "frontend" / "public" / "sitemap.xml").exists())
+check(
+    "роботам не закрыт /api: без него страница не отрисуется",
+    "Disallow: /api" not in (ROOT / "frontend" / "public" / "robots.txt").read_text(),
+)
+check("JSON закрыт от индексации заголовком", "X-Robots-Tag" in main_py)
+check(
+    "страница без JS не пустая",
+    'class="seo"' in index_html and len(re.sub(r"<[^>]+>", "", index_html)) > 800,
+)
+check(
+    "разметка для поиска на месте",
+    'rel="canonical"' in index_html
+    and 'property="og:title"' in index_html
+    and "application/ld+json" in index_html,
 )
 
 css = (ROOT / "frontend" / "src" / "styles" / "global.css").read_text()

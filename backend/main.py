@@ -388,4 +388,13 @@ def _sources() -> list[dict]:
     return listed
 
 
+@app.middleware("http")
+async def hide_api_from_search(request, call_next):
+    """JSON-ответы в поиск не нужны: сам сайт индексируется, его данные — нет."""
+    answer = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        answer.headers["X-Robots-Tag"] = "noindex"
+    return answer
+
+
 app.mount("/", WebFiles(directory=FRONTEND_DIR, html=True, check_dir=False))
