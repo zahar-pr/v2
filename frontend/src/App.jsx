@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Logo from './components/Logo.jsx';
+import ClientLogos from './components/ClientLogos.jsx';
 import Dropdown from './components/Dropdown.jsx';
 import FiltersPanel from './components/FiltersPanel.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
@@ -374,7 +375,7 @@ export default function App() {
             <i />
             <span>{badge()}</span>
           </div>
-          <h1>Поиск поставщиков</h1>
+          <ClientLogos />
 
           <div className="search">
             <div className="search__row">
