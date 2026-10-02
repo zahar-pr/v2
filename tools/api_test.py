@@ -323,7 +323,10 @@ app_jsx = (ROOT / "frontend" / "src" / "App.jsx").read_text()
 intro_jsx = (ROOT / "frontend" / "src" / "components" / "Intro.jsx").read_text()
 logos_jsx = (ROOT / "frontend" / "src" / "components" / "ClientLogos.jsx").read_text()
 help_jsx = (ROOT / "frontend" / "src" / "components" / "HelpButton.jsx").read_text()
-check("памятка показывается один раз", "provizia_intro" in app_jsx)
+check(
+    "памятка встречает на каждом заходе",
+    "provizia_intro" not in app_jsx and "if (meta) setIntroOpen(true)" in app_jsx,
+)
 check("памятка берёт веса из меты, а не из текста", "weights[id]" in intro_jsx)
 check(
     "памятка объясняет зелёные и красные",

@@ -123,24 +123,12 @@ export default function App() {
   }), [settledQuery, cats, region, city, kinds, onlyDocs, onlyVerified, onlyContacts,
     statusFilter, preset, weights, sort]);
 
+  // памятка встречает на каждом заходе и обновлении страницы
   useEffect(() => {
-    if (!meta) return;
-    try {
-      if (localStorage.getItem('provizia_intro')) return;
-    } catch (error) {
-      return;
-    }
-    setIntroOpen(true);
+    if (meta) setIntroOpen(true);
   }, [meta]);
 
-  const closeIntro = () => {
-    setIntroOpen(false);
-    try {
-      localStorage.setItem('provizia_intro', '1');
-    } catch (error) {
-      // приватный режим: памятка покажется снова
-    }
-  };
+  const closeIntro = () => setIntroOpen(false);
 
   // первый заход открывается с готовым примером сравнения — парой поставщиков одного продукта
   useEffect(() => {
