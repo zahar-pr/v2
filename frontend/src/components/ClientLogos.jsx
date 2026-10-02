@@ -31,22 +31,31 @@ function ClientLogo({ name, file }) {
       {failed ? (
         <span className="clients__name">{name}</span>
       ) : (
-        <img
-          src={`/clients/${file}`}
-          alt={name}
-          loading="lazy"
-          decoding="async"
-          onError={() => setFailed(true)}
-        />
+        <img src={`/clients/${file}`} alt={name} decoding="async" onError={() => setFailed(true)} />
       )}
     </li>
   );
 }
 
+/**
+ * Бегущая строка логотипов. Лента печатается дважды подряд и сдвигается ровно на
+ * половину — так склейка не видна и строка идёт бесконечно.
+ */
 export default function ClientLogos() {
-  return (
-    <ul className="clients" aria-label="Клиенты Goulash Tech">
-      {CLIENTS.map(([name, file]) => <ClientLogo key={file} name={name} file={file} />)}
+  const line = (hidden) => (
+    <ul className="clients__line" aria-hidden={hidden || undefined}>
+      {CLIENTS.map(([name, file]) => (
+        <ClientLogo key={`${hidden ? 'copy' : 'main'}-${file}`} name={name} file={file} />
+      ))}
     </ul>
+  );
+
+  return (
+    <div className="clients" aria-label="Клиенты Goulash Tech">
+      <div className="clients__track">
+        {line(false)}
+        {line(true)}
+      </div>
+    </div>
   );
 }

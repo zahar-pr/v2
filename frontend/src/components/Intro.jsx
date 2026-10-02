@@ -1,16 +1,46 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
+const FLY_MS = 420;
 
 /** Короткая памятка на первый заход: как читать балл и цветные карточки. */
 export default function Intro({ weights, onDetails, onClose }) {
+  const sheet = useRef(null);
+  const [leaving, setLeaving] = useState(false);
+
+  // Закрываясь, окно улетает в кнопку «?» — чтобы было видно, где его потом искать.
+  const leave = (then) => {
+    const box = sheet.current;
+    const target = document.querySelector('.helper');
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!box || !target || still) {
+      then();
+      return;
+    }
+
+    const from = box.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    box.style.setProperty('--fly-x', `${to.left + to.width / 2 - (from.left + from.width / 2)}px`);
+    box.style.setProperty('--fly-y', `${to.top + to.height / 2 - (from.top + from.height / 2)}px`);
+    box.style.setProperty('--fly-scale', `${Math.max(to.width / from.width, 0.05)}`);
+    target.classList.add('helper--caught');
+    setLeaving(true);
+    window.setTimeout(() => {
+      target.classList.remove('helper--caught');
+      then();
+    }, FLY_MS);
+  };
+
+  const close = () => leave(onClose);
+
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [onClose]);
+  });
 
   const order = ['reputation', 'volume', 'reach', 'docs', 'logistics', 'trust'];
   const titles = {
@@ -23,12 +53,15 @@ export default function Intro({ weights, onDetails, onClose }) {
   };
 
   return (
-    <div className="modal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className={`modal${leaving ? ' modal--leaving' : ''}`}
+      onClick={(e) => { if (e.target === e.currentTarget) close(); }}
+    >
       <div className="modal__in modal__in--narrow">
-        <div className="modal__sheet">
+        <div className="modal__sheet" ref={sheet}>
           <div className="modal__head">
             <h2>Как читать выдачу</h2>
-            <button type="button" className="btn btn--cyan" onClick={onClose}>Понятно</button>
+            <button type="button" className="btn btn--cyan" onClick={close}>Понятно</button>
           </div>
 
           <div className="intro">
@@ -76,7 +109,7 @@ export default function Intro({ weights, onDetails, onClose }) {
               </p>
             </section>
 
-            <button type="button" className="intro__more" onClick={onDetails}>
+            <button type="button" className="intro__more" onClick={() => leave(onDetails)}>
               Подробно о расчёте и профилях →
             </button>
           </div>

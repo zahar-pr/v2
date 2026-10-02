@@ -321,6 +321,8 @@ check(
 
 app_jsx = (ROOT / "frontend" / "src" / "App.jsx").read_text()
 intro_jsx = (ROOT / "frontend" / "src" / "components" / "Intro.jsx").read_text()
+logos_jsx = (ROOT / "frontend" / "src" / "components" / "ClientLogos.jsx").read_text()
+help_jsx = (ROOT / "frontend" / "src" / "components" / "HelpButton.jsx").read_text()
 check("памятка показывается один раз", "provizia_intro" in app_jsx)
 check("памятка берёт веса из меты, а не из текста", "weights[id]" in intro_jsx)
 check(
@@ -329,6 +331,13 @@ check(
 )
 
 css = (ROOT / "frontend" / "src" / "styles" / "global.css").read_text()
+check("памятку можно открыть кнопкой «?»", "HelpButton" in app_jsx and "helper" in help_jsx)
+check("памятка улетает в кнопку", "--fly-x" in intro_jsx and "helper--caught" in intro_jsx)
+check("лента логотипов печатается дважды", logos_jsx.count("line(") == 2)
+check(
+    "у логотипов нет белой плашки",
+    "background: #ffffff" not in css[css.index(".clients {") : css.index(".search {")],
+)
 check("тёмная тема объявлена", ":root[data-theme='dark']" in css)
 check("светлая и тёмная схемы для системных элементов", css.count("color-scheme") == 2)
 palette = css[css.index(":root {") : css.index("* { box-sizing")]

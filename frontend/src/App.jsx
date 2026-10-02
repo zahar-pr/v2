@@ -10,6 +10,7 @@ import CompareModal from './components/CompareModal.jsx';
 import CallList from './components/CallList.jsx';
 import ScoreExplainer from './components/ScoreExplainer.jsx';
 import Intro from './components/Intro.jsx';
+import HelpButton from './components/HelpButton.jsx';
 import useNarrow from './hooks/useNarrow.js';
 import useTheme from './hooks/useTheme.js';
 import useDebounced from './hooks/useDebounced.js';
@@ -354,6 +355,7 @@ export default function App() {
           </div>
           <div className="header__found">Найдено: <b>{loading ? '…' : total}</b></div>
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <HelpButton onOpen={() => setIntroOpen(true)} />
           <button type="button" className="btn-compare" onClick={openCalls}>
             Обзвон
             <span className="btn-compare__count">{counts.calling || 0}</span>

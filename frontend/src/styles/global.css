@@ -107,6 +107,7 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 @keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(0, 225, 225, 0) } 50% { box-shadow: 0 0 0 6px rgba(0, 225, 225, 0.1) } }
 
 @media (prefers-reduced-motion: reduce) {
+  .clients__track { animation: none; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
@@ -762,25 +763,42 @@ td.cell--muted { color: var(--text-2); }
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--mint); animation: pulse 2.6s ease-in-out infinite;
 }
-/* ровная сетка одинаковых плашек, неполный ряд по центру */
+/* бегущая строка логотипов клиентов: без плашек, монохром на тёмной шапке */
 .clients {
-  --cols: 10; --gap: 8px;
-  display: flex; flex-wrap: wrap; justify-content: center; gap: var(--gap);
-  margin: 0; padding: 0; list-style: none;
+  --speed: 44s;
+  position: relative; overflow: hidden; margin: 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+.clients__track {
+  display: flex; width: max-content;
+  animation: creep var(--speed) linear infinite;
+}
+.clients:hover .clients__track { animation-play-state: paused; }
+
+.clients__line {
+  display: flex; align-items: center; gap: clamp(26px, 4vw, 48px);
+  margin: 0; padding: 0 clamp(13px, 2vw, 24px); list-style: none;
 }
 .clients__item {
-  flex: 0 0 calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols));
-  display: flex; align-items: center; justify-content: center;
-  height: 52px; padding: 8px 12px; min-width: 0;
-  background: #ffffff; border-radius: var(--r-s);
-  animation: heroin 0.4s var(--ease) both;
+  flex: none; display: flex; align-items: center; justify-content: center;
+  height: 34px; opacity: 0.72;
+  transition: opacity 0.2s ease, filter 0.2s ease;
 }
+.clients__item:hover { opacity: 1; }
 .clients__item img {
-  display: block; width: 100%; height: 100%; object-fit: contain;
+  display: block; width: auto; height: 100%; max-width: 140px; object-fit: contain;
+  /* логотипы нарисованы для светлого фона — приводим их к белому силуэту */
+  filter: brightness(0) invert(1);
 }
 .clients__name {
-  font-family: var(--font-display); font-size: 13px; letter-spacing: -0.01em;
-  color: #0f2229; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-family: var(--font-display); font-size: 15px; letter-spacing: -0.01em;
+  color: var(--on-deep); white-space: nowrap;
+}
+
+@keyframes creep {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
 
 .search { margin-top: 16px; }
@@ -972,7 +990,6 @@ td.cell--muted { color: var(--text-2); }
 
 @media (max-width: 1100px) {
   .row__side { width: 164px; }
-  .clients { --cols: 7; }
 }
 
 /* ---------- телефон: список от края до края ---------- */
@@ -980,8 +997,8 @@ td.cell--muted { color: var(--text-2); }
 @media (max-width: 760px) {
   .hero__in { padding-top: 16px; padding-bottom: 20px; }
   .search { margin-top: 14px; }
-  .clients { --cols: 5; --gap: 6px; }
-  .clients__item { height: 44px; padding: 7px 9px; }
+  .clients { --speed: 30s; }
+  .clients__item { height: 28px; }
   .search__field { flex: 1 1 100%; height: 46px; }
   .search .dd { flex: 1 1 calc(50% - 4px); }
   .search .dd__btn { height: 46px; }
@@ -1021,9 +1038,7 @@ td.cell--muted { color: var(--text-2); }
   .empty { padding: 40px 18px; }
 }
 
-@media (max-width: 480px) {
-  .clients { --cols: 4; }
-}
+
 
 @media (max-width: 960px) {
   .catalog__in { grid-template-columns: minmax(0, 1fr); }
@@ -1210,3 +1225,45 @@ td.cell--muted { color: var(--text-2); }
   color: var(--cyan-ink); font-size: 14px;
 }
 .intro__more:hover { color: var(--ink); }
+
+/* ---------- кнопка «?» и полёт памятки в неё ---------- */
+
+.helper {
+  display: inline-flex; align-items: center; gap: 8px; flex: none; cursor: pointer;
+  height: 38px; padding: 0 13px 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16); border-radius: var(--pill);
+  background: rgba(255, 255, 255, 0.08); color: var(--on-deep);
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s var(--ease);
+}
+.helper:hover { background: rgba(255, 255, 255, 0.16); border-color: var(--cyan); }
+.helper__sign {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--cyan); color: var(--deep);
+  font-family: var(--font-display); font-size: 14px; line-height: 1;
+}
+.helper__hint { font-size: 13px; white-space: nowrap; }
+
+/* окно «поймано» кнопкой: короткий отклик в момент приземления */
+.helper--caught { transform: scale(1.14); border-color: var(--cyan); }
+.helper--caught .helper__sign { animation: catchping 0.42s var(--ease); }
+
+@keyframes catchping {
+  0% { transform: scale(1); }
+  55% { transform: scale(1.45); }
+  100% { transform: scale(1); }
+}
+
+.modal--leaving { background: rgba(5, 26, 33, 0); backdrop-filter: blur(0); }
+.modal--leaving,
+.modal--leaving .modal__sheet { transition: 0.42s var(--ease); pointer-events: none; }
+.modal--leaving .modal__sheet {
+  transform: translate(var(--fly-x, 0), var(--fly-y, 0)) scale(var(--fly-scale, 0.1));
+  opacity: 0;
+}
+
+@media (max-width: 760px) {
+  .helper { width: 36px; height: 36px; padding: 0; justify-content: center; }
+  .helper__sign { width: 24px; height: 24px; font-size: 15px; }
+  .helper__hint { display: none; }
+}
