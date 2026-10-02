@@ -1198,6 +1198,7 @@ td.cell--muted { color: var(--text-2); }
   background: var(--field); color: var(--text-2); font-size: 13px;
 }
 .intro__weight b { color: var(--ink); font-weight: 600; }
+.intro__after { margin-top: 10px; }
 
 .intro__item--good { padding-left: 13px; box-shadow: inset 3px 0 0 var(--mint); }
 .intro__item--good .intro__title { color: var(--mint-ink); }
