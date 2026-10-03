@@ -476,6 +476,8 @@ td.cell--muted { color: var(--text-2); }
 .cmphead strong { display: block; font-size: 15px; }
 .cmphead small { display: block; margin-top: 2px; font-size: 12px; color: var(--text-3); }
 .cmphead .fstrip { grid-column: 1 / -1; }
+.cmphead .safety { margin-top: 5px; font-size: 11px; }
+.call__main .safety { margin-top: 4px; font-size: 11px; }
 
 .diff {
   margin-bottom: 16px; padding: 14px 16px; border-radius: var(--r-l);

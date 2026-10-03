@@ -144,7 +144,18 @@ def _absorb(first: dict, extra: dict) -> None:
 
 
 def _join(first, second, limit: int) -> list:
-    return list(dict.fromkeys([*(first or []), *(second or [])]))[:limit]
+    """Склейка без дублей. Соцсети приходят словарями, их различаем по ссылке."""
+    taken: list = []
+    seen: set[str] = set()
+    for item in [*(first or []), *(second or [])]:
+        mark = item.get("url", "") if isinstance(item, dict) else str(item)
+        if mark in seen:
+            continue
+        seen.add(mark)
+        taken.append(item)
+        if len(taken) == limit:
+            break
+    return taken
 
 
 def score_one(row: dict) -> dict:

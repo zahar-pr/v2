@@ -630,6 +630,8 @@ check(
 
 store.save_enrichment("t", {"geo": "вся РФ"})
 index.score_one(store.get("t"))
+# город помечаем свежим, чтобы запрос не полез в сеть за индексом
+store.mark_refreshed("Екатеринбург", 1, "тест")
 wide = client.get("/api/suppliers", params={"city": "Екатеринбург"}).json()
 check(
     "федеральный поставщик виден в чужом городе",
@@ -697,6 +699,22 @@ check(
 check("памятка предупреждает про демо-данные", "демонстрационное" in intro_jsx)
 check("памятка объясняет санитарную историю", "санитарная истори" in intro_jsx.lower())
 check("памятка объясняет уровень цен", "уровень цен" in intro_jsx.lower())
+
+# ---------- поиск по реквизитам ----------
+
+store.save_enrichment("c", {"inn": "1659077160"})
+index.score_one(store.get("c"))
+by_inn = client.get("/api/suppliers", params={"q": "1659077160"}).json()
+check(
+    "поиск находит по ИНН",
+    [i["id"] for i in by_inn["items"]] == ["c"],
+    [i["id"] for i in by_inn["items"]],
+)
+check(
+    "чужой ИНН ничего не находит",
+    client.get("/api/suppliers", params={"q": "9999999999"}).json()["total"] == 0,
+)
+check("соцсети-словари не ломают склейку", index._join([{"url": "a"}], [{"url": "a"}], 4) == [{"url": "a"}])
 
 print()
 print(f"{sum(ok)}/{len(ok)} проверок прошло")

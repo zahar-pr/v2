@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import FactorStrip from './FactorStrip.jsx';
+import SafetyBadge from './SafetyBadge.jsx';
 import { COMPARE_ROWS, placeOf, weightsToString } from '../data/suppliers.js';
 import { recommend } from '../api/client.js';
 
@@ -69,6 +70,7 @@ export default function CompareModal({
                   <div>
                     <strong>{s.name}</strong>
                     <small>{[s.typeTitle, placeOf(s)].filter(Boolean).join(' · ')}</small>
+                    <SafetyBadge safety={s.safety} compact />
                   </div>
                   <FactorStrip factors={s.factors} onOpen={() => {}} />
                 </div>

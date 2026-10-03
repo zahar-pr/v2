@@ -369,6 +369,12 @@ def _conditions(
         where.append("id IN (SELECT supplier_id FROM pipeline WHERE status = ?)")
         params.append(status)
     for word in query.lower().split():
+        digits = "".join(ch for ch in word if ch.isdigit())
+        if len(digits) >= 10 and digits == word:
+            # Пришли с реквизитами из счёта — ищем по ИНН и ОГРН, а не по тексту
+            where.append("(inn = ? OR ogrn = ?)")
+            params += [digits, digits]
+            continue
         where.append("haystack LIKE ?")
         params.append(f"%{word}%")
     return where, params
@@ -674,8 +680,9 @@ def relax_options(filters: dict, labels: dict) -> list[dict]:
 
 def _is_active(filters: dict, key: str) -> bool:
     value = filters.get(key)
-    if key == "kinds":
-        return bool(value)
+    if key == "delivers":
+        # Галочка включена по умолчанию: ослабление — это как раз её снятие
+        return value is False
     return bool(value)
 
 
@@ -726,10 +733,12 @@ FULLNESS = " + ".join(
 )
 
 
-# Пара, с которой открывается «Сравнить»: один город, один продукт, у обоих реквизиты,
-# руководитель и телефон — видно, что сравниваются все строки. Если кого-то из них нет
-# в индексе, берём самую заполненную пару одного продукта, какую найдём.
-PINNED = ("хлебозавод2", "донскиепекарни")
+# Пара, с которой открывается «Сравнить»: один продукт, у обоих реквизиты,
+# руководитель, телефон и комментарии команды — видно, что сравниваются все строки.
+# Компании с санитарным решением или прекращённым юрлицом в пример не берём: витрина
+# должна показывать работу сервиса, а не предлагать закрытый завод. Если кого-то из
+# них нет в индексе, берём самую заполненную пару одного продукта, какую найдём.
+PINNED = ("хлебозавод2", "первыйхлебокомбинат")
 
 
 def showcase(size: int = 2) -> list[str]:
@@ -742,7 +751,8 @@ def showcase(size: int = 2) -> list[str]:
         connect()
         .execute(
             f"SELECT id, city, region, cats, website, inn, {FULLNESS} AS filled FROM suppliers "
-            f"WHERE kind_class != 'retail' AND {HAS_CONTACTS} ORDER BY filled DESC LIMIT 300"
+            f"WHERE kind_class != 'retail' AND {RISKY} AND {HAS_CONTACTS} "
+            "ORDER BY filled DESC LIMIT 300"
         )
         .fetchall()
     )

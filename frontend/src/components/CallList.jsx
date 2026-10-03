@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import StatusPicker from './StatusPicker.jsx';
+import SafetyBadge from './SafetyBadge.jsx';
 import { distanceOf, plural } from '../data/suppliers.js';
 
 function Call({ s, number, statuses, onStatus, onOpen }) {
@@ -13,6 +14,7 @@ function Call({ s, number, statuses, onStatus, onOpen }) {
         <div className="call__sub">
           {[s.typeTitle, s.city || s.area, distanceOf(s)].filter(Boolean).join(' · ')}
         </div>
+        <SafetyBadge safety={s.safety} compact />
         {s.ask.length > 0 && (
           <div className="call__ask">Спросить: {s.ask.slice(0, 3).join('; ').toLowerCase()}</div>
         )}
