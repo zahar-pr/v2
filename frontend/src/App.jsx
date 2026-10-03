@@ -533,7 +533,12 @@ export default function App() {
               <div className="summary">
                 С контактами <b>{facets.withContacts}</b>, с документами <b>{facets.withDocs}</b>,
                 профиль заполнен в среднем на <b>{facets.fullness}%</b>.
-                {facets.risky ? <> С замечаниями: <b>{facets.risky}</b> — они в конце списка.</> : null}
+                {facets.risky ? (
+                  <>
+                    {' '}С замечаниями: <b>{facets.risky}</b>
+                    {onlySafe ? ' — скрыты фильтром.' : ' — они в конце списка.'}
+                  </>
+                ) : null}
                 {counts.calling ? <> В работе: <b>{counts.calling}</b>.</> : null}
                 {counts.fit ? <> Подходят: <b>{counts.fit}</b>.</> : null}
               </div>

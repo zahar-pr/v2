@@ -292,6 +292,11 @@ def search(
         delivers,
         status,
     )
+    # Счётчик «с замечаниями» считаем без самой галочки: иначе включённый фильтр
+    # показывает ноль и непонятно, сколько карточек он убирает.
+    loose, loose_values = _conditions(
+        query, region, city, only_docs, only_verified, only_contacts, False, price, delivers, status
+    )
     by_cat, cat_values = _category_clause(category)
     by_kind, kind_values = _kind_clause(kinds)
 
@@ -311,6 +316,7 @@ def search(
         Slice(condition, params),
         Slice(" AND ".join([*base, *by_cat]), [*base_values, *cat_values]),
         Slice(" AND ".join([*base, *by_kind]), [*base_values, *kind_values]),
+        Slice(" AND ".join([*loose, *by_cat, *by_kind]), [*loose_values, *cat_values, *kind_values]),
     )
     return [row_to_dict(row) for row in rows], total, facets
 
@@ -398,7 +404,9 @@ def _place_clause(
     )
 
 
-def _facets(current: Slice, without_kinds: Slice, without_cats: Slice) -> dict:
+def _facets(
+    current: Slice, without_kinds: Slice, without_cats: Slice, without_safe: Slice
+) -> dict:
     connection = connect()
     types = {
         row["kind_class"]: row["n"]
@@ -420,7 +428,6 @@ def _facets(current: Slice, without_kinds: Slice, without_cats: Slice) -> dict:
         f"SELECT SUM(CASE WHEN {HAS_CONTACTS} THEN 1 ELSE 0 END) AS contacts, "
         "SUM(CASE WHEN certs != '[]' THEN 1 ELSE 0 END) AS docs, "
         "SUM(CASE WHEN verified = 1 THEN 1 ELSE 0 END) AS verified, "
-        f"SUM(CASE WHEN {RISKY} THEN 0 ELSE 1 END) AS risky, "
         "SUM(CASE WHEN price_tier = 'low' THEN 1 ELSE 0 END) AS price_low, "
         "SUM(CASE WHEN price_tier = 'mid' THEN 1 ELSE 0 END) AS price_mid, "
         "SUM(CASE WHEN price_tier = 'high' THEN 1 ELSE 0 END) AS price_high, "
@@ -429,13 +436,18 @@ def _facets(current: Slice, without_kinds: Slice, without_cats: Slice) -> dict:
         f"FROM suppliers WHERE {current.condition}",
         tuple(current.params),
     ).fetchone()
+    risky = connection.execute(
+        f"SELECT SUM(CASE WHEN {RISKY} THEN 0 ELSE 1 END) AS n FROM suppliers "
+        f"WHERE {without_safe.condition}",
+        tuple(without_safe.params),
+    ).fetchone()
     return {
         "types": types,
         "cats": {item.id: cats[item.id] or 0 for item in catalog.CATEGORIES},
         "withContacts": counters["contacts"] or 0,
         "withDocs": counters["docs"] or 0,
         "verified": counters["verified"] or 0,
-        "risky": counters["risky"] or 0,
+        "risky": risky["n"] or 0,
         "prices": {
             "low": counters["price_low"] or 0,
             "mid": counters["price_mid"] or 0,

@@ -97,7 +97,7 @@ class CompareIn(BaseModel):
 
 @app.get("/api/meta")
 def api_meta():
-    answer = payload.meta(store.stats(), index.state, _sources(), store.best_defaults())
+    answer = payload.meta(store.stats(), index.state, _sources(), _defaults())
     showcase = store.get_many(store.showcase())
     answer["showcase"] = web.cards(showcase, web.weights_of("", ""))
     return answer
@@ -378,6 +378,23 @@ def _rescore(supplier_id: str) -> None:
     row = store.get(supplier_id)
     if row:
         index.score_one(row)
+
+
+def _defaults() -> dict:
+    """Первый экран открывается там, где работает закупщик.
+
+    Сервис сделан для Goulash Tech, база компании — Екатеринбург, поэтому выдача
+    стартует по нему: видно и местные производства, и федеральных поставщиков,
+    которые туда довезут. Категория остаётся «все» — сужать за пользователя
+    незачем, он выберет продукт сам или возьмёт готовый проект в кабинете.
+    """
+    found = store.best_defaults()
+    home = workspace.BASE_CITY
+    if catalog.city(home) and store.count_for(city=home):
+        found["region"] = catalog.region_of(home)
+        found["city"] = home
+    found["category"] = catalog.ANY
+    return found
 
 
 def _sources() -> list[dict]:

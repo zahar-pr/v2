@@ -64,7 +64,7 @@ def meta(stats: dict, state: dict, sources: list[dict], defaults: dict | None = 
         "defaults": {
             "category": defaults.get("category") or catalog.ANY,
             "region": defaults.get("region") or catalog.ANY_REGION_TITLE,
-            "city": catalog.ANY_CITY_TITLE,
+            "city": defaults.get("city") or catalog.ANY_CITY_TITLE,
             "sort": catalog.SORTS[0],
             "preset": scoring.DEFAULT_PRESET,
             "kinds": list(SUPPLY_KINDS),
