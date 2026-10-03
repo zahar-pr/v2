@@ -318,7 +318,9 @@ def search(
 def _category_clause(category: str) -> tuple[list[str], list]:
     chosen = [item for item in (category or "").split(",") if item]
     if not chosen:
-        return [], []
+        # Непищевые категории — только по прямому запросу: иначе производитель
+        # пароконвектоматов оказывается первым в поиске поставщиков еды.
+        return [f"cats NOT LIKE '%,{item},%'" for item in catalog.NON_FOOD_CATEGORIES], []
     return ["(" + " OR ".join("cats LIKE ?" for _ in chosen) + ")"], [
         f"%,{item},%" for item in chosen
     ]
@@ -819,7 +821,9 @@ def best_defaults() -> dict:
     for row in rows:
         weight = (row["alive"] or 0) * 6 + row["total"]
         for item in (row["cats"] or "").split(","):
-            if item:
+            # «Опт», «упаковка», «оборудование» — не продукт: первый экран должен
+            # открываться на конкретной еде, иначе непонятно, что мы ищем
+            if item and item not in GENERIC_CATS and item not in catalog.NON_FOOD_CATEGORIES:
                 counts[item] = counts.get(item, 0) + weight
     return {
         "region": best_region,

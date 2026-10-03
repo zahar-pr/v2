@@ -1,7 +1,9 @@
 import React from 'react';
 import FactorStrip from './FactorStrip.jsx';
 import StatusPicker from './StatusPicker.jsx';
-import { placeOf, plural, ratingOf, statusTitle, strongest, weakest } from '../data/suppliers.js';
+import SafetyBadge from './SafetyBadge.jsx';
+import PriceTag from './PriceTag.jsx';
+import { placeOf, plural, statusTitle, strongest, weakest } from '../data/suppliers.js';
 
 /** Пустые поля не рисуем: строка выдачи должна показывать то, что известно. */
 function factsOf(s) {
@@ -14,6 +16,15 @@ function factsOf(s) {
   ].filter(([, value]) => value);
 }
 
+function reviewTag(s) {
+  const box = s.reviewsSummary || {};
+  if (box.externalAverage === null || box.externalAverage === undefined) return null;
+  const count = box.externalCount
+    ? ` · ${box.externalCount} ${plural(box.externalCount, 'отзыв', 'отзыва', 'отзывов')}`
+    : '';
+  return `★ ${box.externalAverage}${count}`;
+}
+
 export default function SupplierCard({
   supplier, index, statuses, inCompare, compareFull, onOpen, onCompare, onStatus,
 }) {
@@ -21,32 +32,36 @@ export default function SupplierCard({
   const strong = strongest(s);
   const weak = weakest(s);
   const facts = factsOf(s);
+  const reviews = reviewTag(s);
+  const tone = (s.safety && s.safety.tone) || 'none';
 
   return (
     <article
-      className={`row${s.trustTier ? ` row--${s.trustTier}` : ''}`}
+      className={`row row--tone-${tone}${s.trustTier ? ` row--${s.trustTier}` : ''}`}
       style={{ animationDelay: `${Math.min(index, 8) * 0.03}s` }}
     >
       <div className="row__main">
-        {s.trustTier === 'trusted' && (
-          <div className="mark mark--trusted">
-            {s.clients.length ? `Поставщик сетей: ${s.clients.join(', ')}` : s.verdict}
-          </div>
-        )}
-        {s.trustTier === 'blocked' && (
-          <div className="mark mark--blocked">
-            Не рекомендуем{s.incident.sanction ? ` · ${s.incident.sanction}` : ''}
-          </div>
-        )}
+        <div className="row__marks">
+          <SafetyBadge safety={s.safety} />
+          {s.trustTier === 'trusted' && s.clients.length > 0 && (
+            <span className="mark mark--trusted">Возит сетям: {s.clients.slice(0, 3).join(', ')}</span>
+          )}
+        </div>
+
         <button type="button" className="row__name" onClick={onOpen}>{s.name}</button>
         <div className="row__sub">
           {[s.typeTitle, placeOf(s), s.years].filter(Boolean).join(' · ')}
         </div>
 
+        {s.coverage && s.coverage.reason && (
+          <div className="row__reach">{s.coverage.reason}</div>
+        )}
+
         <div className="tags">
-          {ratingOf(s) && (
-            <span className="tag tag--rating" title={`Оценка на ${s.reviewsSource}`}>
-              ★ {s.rating.toFixed(1)} · {s.reviewsSource}
+          <PriceTag price={s.priceLevel} />
+          {reviews && (
+            <span className="tag tag--rating" title={(s.reviewsSummary || {}).verdict}>
+              {reviews}
             </span>
           )}
           {s.commentsCount > 0 && (
@@ -55,8 +70,9 @@ export default function SupplierCard({
               команда: {s.commentsCount}
             </span>
           )}
-          {s.legalActive && <span className="tag tag--ok">действующее юрлицо</span>}
-          {s.verified && <span className="tag tag--ok">данные подтверждены</span>}
+          <span className="tag tag--fill" title="Сколько полей профиля заполнено">
+            профиль {s.profile.percent}%
+          </span>
           {s.cats.slice(0, 2).map((c) => <span className="tag tag--cat" key={c}>{c}</span>)}
           {s.status !== 'new' && (
             <span className={`tag tag--status tag--${s.status}`}>
@@ -89,7 +105,9 @@ export default function SupplierCard({
             ))}
           </div>
         ) : (
-          <div className="facts-none">Условия работы уточняйте — в источниках их нет</div>
+          <div className="facts-none">
+            Условий в источниках нет — {s.profile.missing.length} полей закрываются одним звонком
+          </div>
         )}
 
         {s.okved && (
@@ -123,7 +141,7 @@ export default function SupplierCard({
         )}
 
         <div className="row__actions">
-          <button type="button" className="btn btn--deep" onClick={onOpen}>Подробнее</button>
+          <button type="button" className="btn btn--deep" onClick={onOpen}>Досье</button>
           <button
             type="button"
             className={`btn ${inCompare ? 'btn--in' : compareFull ? 'btn--full' : 'btn--ghost'}`}

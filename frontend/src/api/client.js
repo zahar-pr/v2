@@ -39,6 +39,10 @@ export function getMeta() {
   return call('/api/meta');
 }
 
+export function getWorkspace() {
+  return call('/api/workspace');
+}
+
 export function getStatus() {
   return call('/api/status');
 }

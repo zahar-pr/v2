@@ -6,6 +6,9 @@ class Category:
     id: str
     title: str
     tags: tuple[tuple[str, str], ...]
+    # Еда или нет. Непищевые категории не показываются, пока их не выбрали явно:
+    # сервис ищет поставщиков продуктов, и пароконвектомат в такой выдаче — шум.
+    food: bool = True
 
 
 @dataclass(frozen=True)
@@ -125,6 +128,12 @@ CATEGORIES = (
         "spices",
         "Специи и ингредиенты",
         (("shop", "spices"), ("shop", "herbs"), ("shop", "nuts"), ("shop", "honey")),
+    ),
+    Category(
+        "equipment",
+        "Оборудование и ПО",
+        (),
+        food=False,
     ),
     Category(
         "packaging",
@@ -391,6 +400,8 @@ for _category in CATEGORIES:
         TAG_CATEGORIES[_tag] = TAG_CATEGORIES.get(_tag, ()) + (_category.id,)
 
 ALL_TAGS = tuple(TAG_CATEGORIES)
+
+NON_FOOD_CATEGORIES = tuple(item.id for item in CATEGORIES if not item.food)
 
 
 def category(category_id: str) -> Category | None:

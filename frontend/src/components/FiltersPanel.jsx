@@ -30,9 +30,10 @@ function Option({ type, checked, disabled, label, hint, count, onChange }) {
 }
 
 export default function FiltersPanel({
-  meta, preset, cats, kinds, onlyDocs, onlyVerified, onlyContacts,
+  meta, preset, cats, kinds, onlyDocs, onlyVerified, onlyContacts, onlySafe, price, delivers, city,
   facets, onPreset, onExplain, onCat, onAllCats, onKind,
-  onDocs, onVerified, onContacts, onReset, anyFilter, total, loading, onApply,
+  onDocs, onVerified, onContacts, onSafe, onPrice, onDelivers,
+  onReset, anyFilter, total, loading, onApply,
 }) {
   const [allCats, setAllCats] = useState(false);
   if (!meta) return null;
@@ -65,6 +66,59 @@ export default function FiltersPanel({
                 onChange={() => onPreset(item.id)}
               />
             ))}
+          </div>
+        </Group>
+
+        <Group title="Безопасность еды">
+          <div className="options">
+            <Option
+              type="checkbox" checked={onlySafe}
+              label="Только те, с кем можно работать"
+              hint="Скрыть санитарные решения и закрытые юрлица"
+              count={facets ? facets.risky : undefined}
+              onChange={onSafe}
+            />
+          </div>
+          <div className="fnote">
+            Компании с приостановкой и с записью о прекращении деятельности и так уходят в
+            конец выдачи — галочка убирает их совсем.
+          </div>
+        </Group>
+
+        <Group title="Уровень цен">
+          <div className="chips">
+            <button
+              type="button"
+              className={`chip${price === '' ? ' chip--on' : ''}`}
+              onClick={() => onPrice('')}
+            >
+              Любой
+            </button>
+            {meta.prices.map((item) => (
+              <button
+                type="button" key={item.id} title={item.hint}
+                className={`chip chip--${item.id}${price === item.id ? ' chip--on' : ''}`}
+                onClick={() => onPrice(price === item.id ? '' : item.id)}
+              >
+                {item.title}
+                {facets && <span>{facets.prices[item.id] || 0}</span>}
+              </button>
+            ))}
+          </div>
+          <div className="fnote">
+            Уровень выводится из структуры сделки: завод дешевле дистрибьютора, дистрибьютор
+            дешевле мелкого опта. Это оценка, а не цена из прайса.
+          </div>
+        </Group>
+
+        <Group title="География">
+          <div className="options">
+            <Option
+              type="checkbox" checked={delivers}
+              label={city ? `Все, кто довезёт в ${city}` : 'Все, кто довезёт в этот регион'}
+              hint="Вместе с федеральными поставщиками из других городов"
+              onChange={onDelivers}
+            />
           </div>
         </Group>
 

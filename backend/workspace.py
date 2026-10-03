@@ -14,6 +14,7 @@ Goulash Tech ведёт закупки для девятнадцати сете�
 from dataclasses import dataclass
 
 import catalog
+import safety
 import store
 import team
 
@@ -153,7 +154,34 @@ def card(project: Project) -> dict:
         "need": project.need,
         "found": found,
         "safe": safe,
+        "incidents": incidents_of(project.chain),
     }
+
+
+def incidents_of(chain: str) -> list[dict]:
+    """Поставщики именно этой сети, попавшие под санитарные решения.
+
+    Для закупщика это самая важная строка в проекте: он подбирает замену ровно
+    тем, кого закрыли, и должен видеть, кого именно.
+    """
+    return [
+        {
+            "name": _name_of(item.key),
+            "title": item.title,
+            "date": safety._human_date(item.date),
+            "active": safety.active(item),
+            "source": item.source,
+        }
+        for item in safety.INCIDENTS
+        if item.chain == chain
+    ]
+
+
+def _name_of(name_key: str) -> str:
+    row = store.connect().execute(
+        "SELECT name FROM suppliers WHERE name_key=? LIMIT 1", (name_key,)
+    ).fetchone()
+    return row["name"] if row else name_key
 
 
 def overview() -> dict:

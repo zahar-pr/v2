@@ -283,7 +283,7 @@ def _safety(row: dict) -> dict:
             "docs": safety.food_docs(row),
             "supervised": safety.under_supervision(row),
         },
-        "price": pricing.level(row),
+        "priceLevel": pricing.level(row),
     }
 
 
@@ -366,7 +366,10 @@ EXPORT_COLUMNS = (
     ("Приоритет", lambda c: c["score"]),
     ("Вердикт", lambda c: c["verdict"]),
     ("Санитарная история", lambda c: c["safety"]["title"]),
-    ("Уровень цен", lambda c: c["price"]["title"] + (" (оценка)" if c["price"]["estimate"] else "")),
+    (
+        "Уровень цен",
+        lambda c: c["priceLevel"]["title"] + (" (оценка)" if c["priceLevel"]["estimate"] else ""),
+    ),
     ("Полнота профиля", lambda c: f'{c["profile"]["percent"]}%'),
     ("Название", lambda c: c["name"]),
     ("Тип", lambda c: c["typeTitle"]),

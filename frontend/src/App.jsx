@@ -11,11 +11,12 @@ import CallList from './components/CallList.jsx';
 import ScoreExplainer from './components/ScoreExplainer.jsx';
 import Intro from './components/Intro.jsx';
 import HelpButton from './components/HelpButton.jsx';
+import Workspace from './components/Workspace.jsx';
 import useNarrow from './hooks/useNarrow.js';
 import useTheme from './hooks/useTheme.js';
 import useDebounced from './hooks/useDebounced.js';
 import {
-  getCallList, getMeta, getNotes, getStatus, getSuppliers, saveNote, setStatus,
+  getCallList, getMeta, getNotes, getStatus, getSuppliers, getWorkspace, saveNote, setStatus,
 } from './api/client.js';
 import { weightsToString } from './data/suppliers.js';
 
@@ -36,6 +37,9 @@ export default function App() {
   const [onlyDocs, setOnlyDocs] = useState(false);
   const [onlyVerified, setOnlyVerified] = useState(false);
   const [onlyContacts, setOnlyContacts] = useState(false);
+  const [onlySafe, setOnlySafe] = useState(false);
+  const [price, setPrice] = useState('');
+  const [delivers, setDelivers] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
 
   const [items, setItems] = useState([]);
@@ -61,6 +65,10 @@ export default function App() {
   const [explainOpen, setExplainOpen] = useState(false);
   const [introOpen, setIntroOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [deskOpen, setDeskOpen] = useState(false);
+  const [desk, setDesk] = useState(null);
+  const [deskLoading, setDeskLoading] = useState(false);
+  const [project, setProject] = useState(null);
   const [notes, setNotes] = useState({});
   const [showcase, setShowcase] = useState([]);
 
@@ -116,12 +124,15 @@ export default function App() {
     onlyDocs,
     onlyVerified,
     onlyContacts,
+    onlySafe,
+    price,
+    delivers,
     status: statusFilter,
     preset,
     weights: weightsToString(weights),
     sort,
-  }), [settledQuery, cats, region, city, kinds, onlyDocs, onlyVerified, onlyContacts,
-    statusFilter, preset, weights, sort]);
+  }), [settledQuery, cats, region, city, kinds, onlyDocs, onlyVerified, onlyContacts, onlySafe,
+    price, delivers, statusFilter, preset, weights, sort]);
 
   // памятка встречает на каждом заходе и обновлении страницы
   useEffect(() => {
@@ -207,12 +218,36 @@ export default function App() {
 
   const exportUrl = () => {
     const search = new URLSearchParams();
-    Object.entries({ ...filters, limit: 300 }).forEach(([key, value]) => {
+    Object.entries({ ...filters, delivers: String(delivers), limit: 300 }).forEach(([key, value]) => {
       if (value !== '' && value !== undefined && value !== null && value !== false) {
         search.set(key, String(value));
       }
     });
     return '/api/export.csv?' + search;
+  };
+
+  const openDesk = () => {
+    setDeskOpen(true);
+    setMenu(null);
+    if (desk) return;
+    setDeskLoading(true);
+    getWorkspace()
+      .then((answer) => { setDesk(answer); setDeskLoading(false); })
+      .catch(() => { setDesk(null); setDeskLoading(false); });
+  };
+
+  // Проект сети — это готовый срез: город сети и набор её продуктов.
+  const pickProject = (item) => {
+    if (!meta) return;
+    setProject(item);
+    setCats(item.cats);
+    setCity(item.city || meta.labels.anyCity);
+    setRegion(item.city ? (meta.regions.find((r) => (meta.cities[r] || []).includes(item.city)) || meta.labels.anyRegion) : meta.labels.anyRegion);
+    setKinds(meta.defaults.kinds);
+    setOnlySafe(true);
+    setStatusFilter('');
+    setQuery('');
+    setDeskOpen(false);
   };
 
   const openCalls = () => {
@@ -241,7 +276,8 @@ export default function App() {
       || inCalls(id)
       || showcase.find((s) => s.id === id))
     .filter(Boolean);
-  const anyFilter = Boolean(query) || onlyDocs || onlyVerified || onlyContacts || statusFilter
+  const anyFilter = Boolean(query) || onlyDocs || onlyVerified || onlyContacts || onlySafe
+    || price || !delivers || statusFilter
     || cats.length > 0
     || (meta && (region !== meta.defaults.region || city !== meta.defaults.city
       || sort !== meta.defaults.sort || kinds.join(',') !== meta.defaults.kinds.join(',')));
@@ -268,8 +304,10 @@ export default function App() {
     setCity(meta.defaults.city);
     setSort(meta.defaults.sort);
     setKinds(meta.defaults.kinds);
-    setOnlyDocs(false); setOnlyVerified(false); setOnlyContacts(false);
+    setOnlyDocs(false); setOnlyVerified(false); setOnlyContacts(false); setOnlySafe(false);
+    setPrice(''); setDelivers(true);
     setStatusFilter('');
+    setProject(null);
   };
 
   const changeRegion = (value) => {
@@ -291,6 +329,9 @@ export default function App() {
   const relaxOne = (key) => {
     if (!meta) return;
     if (key === 'only_docs') setOnlyDocs(false);
+    else if (key === 'only_safe') setOnlySafe(false);
+    else if (key === 'price') setPrice('');
+    else if (key === 'delivers') setDelivers(true);
     else if (key === 'only_verified') setOnlyVerified(false);
     else if (key === 'only_contacts') setOnlyContacts(false);
     else if (key === 'kinds') setKinds(meta.kinds.map((k) => k.id));
@@ -319,7 +360,7 @@ export default function App() {
   };
 
   const activeFilters = [
-    query, onlyDocs, onlyVerified, onlyContacts, statusFilter,
+    query, onlyDocs, onlyVerified, onlyContacts, onlySafe, price, !delivers, statusFilter,
     cats.length > 0,
     meta && kinds.join(',') !== meta.defaults.kinds.join(','),
   ].filter(Boolean).length;
@@ -330,7 +371,7 @@ export default function App() {
     if (loading) return 'Подбираем поставщиков';
     if (indexing) return `Индекс наполняется: ${status.citiesDone} из ${status.citiesTotal} городов`;
     if (!stats) return '';
-    return `${stats.producers} производств и ${stats.wholesale} оптовых баз в ${stats.citiesIndexed} городах`;
+    return `${stats.producers} производств и ${stats.wholesale} оптовых баз в ${stats.citiesIndexed} городах · каждая сверена с перечнями Роспотребнадзора`;
   };
 
   return (
@@ -344,6 +385,9 @@ export default function App() {
           <div className="header__found">Найдено: <b>{loading ? '…' : total}</b></div>
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <HelpButton onOpen={() => setIntroOpen(true)} />
+          <button type="button" className="btn-compare btn-compare--desk" onClick={openDesk}>
+            Кабинет
+          </button>
           <button type="button" className="btn-compare" onClick={openCalls}>
             Обзвон
             <span className="btn-compare__count">{counts.calling || 0}</span>
@@ -416,6 +460,8 @@ export default function App() {
             <FiltersPanel
               meta={meta} preset={preset} cats={cats} kinds={kinds}
               onlyDocs={onlyDocs} onlyVerified={onlyVerified} onlyContacts={onlyContacts}
+              onlySafe={onlySafe} price={price} delivers={delivers}
+              city={city === (meta && meta.labels.anyCity) ? '' : city}
               facets={facets} anyFilter={anyFilter}
               onPreset={changePreset}
               onExplain={() => { setExplainOpen(true); setFiltersOpen(false); }}
@@ -423,6 +469,9 @@ export default function App() {
               onDocs={() => setOnlyDocs((v) => !v)}
               onVerified={() => setOnlyVerified((v) => !v)}
               onContacts={() => setOnlyContacts((v) => !v)}
+              onSafe={() => setOnlySafe((v) => !v)}
+              onPrice={setPrice}
+              onDelivers={() => setDelivers((v) => !v)}
               onReset={resetAll}
               total={total} loading={loading}
               onApply={() => setFiltersOpen(false)}
@@ -469,10 +518,22 @@ export default function App() {
               ))}
             </div>
 
+            {project && (
+              <div className="projectbar">
+                <span className="projectbar__tag">Проект</span>
+                <b>{project.chain}</b>
+                <span className="projectbar__need">{project.need}</span>
+                <button type="button" onClick={() => { setProject(null); resetAll(); }}>
+                  Снять
+                </button>
+              </div>
+            )}
+
             {!loading && !error && facets && total > 0 && (
               <div className="summary">
                 С контактами <b>{facets.withContacts}</b>, с документами <b>{facets.withDocs}</b>,
-                данные подтверждены у <b>{facets.verified}</b>.
+                профиль заполнен в среднем на <b>{facets.fullness}%</b>.
+                {facets.risky ? <> С замечаниями: <b>{facets.risky}</b> — они в конце списка.</> : null}
                 {counts.calling ? <> В работе: <b>{counts.calling}</b>.</> : null}
                 {counts.fit ? <> Подходят: <b>{counts.fit}</b>.</> : null}
               </div>
@@ -573,7 +634,7 @@ export default function App() {
 
       <footer className="footer">
         <div className="wrap footer__in">
-          <div>Провизия — поиск поставщиков food-направления</div>
+          <div>Goulash Поставщики — поиск поставщиков продуктов для общепита</div>
           <div>
             Источники: {((meta && meta.sources) || []).filter((s) => s.active).map((s) => s.title).join(', ')}
           </div>
@@ -612,6 +673,16 @@ export default function App() {
           onStatus={changeStatus}
           onOpen={(id) => { setSelId(id); setCallsOpen(false); }}
           onClose={() => setCallsOpen(false)}
+        />
+      )}
+
+      {deskOpen && (
+        <Workspace
+          data={desk} loading={deskLoading}
+          statuses={(meta && meta.statuses) || []}
+          onPick={pickProject}
+          onOpen={(id) => { setSelId(id); setDeskOpen(false); }}
+          onClose={() => setDeskOpen(false)}
         />
       )}
 

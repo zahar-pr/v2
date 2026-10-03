@@ -56,11 +56,31 @@ export function weightsToString(weights) {
 
 export const COMPARE_ROWS = [
   { label: 'Приоритет звонка', get: (s) => `${s.score} из 100 · ${dash(s.verdict)}`, mint: true },
+  { label: 'Санитарная история', get: (s) => s.safety.title, mint: true },
+  {
+    label: 'Ограничение сейчас',
+    get: (s) => {
+      if (!s.safety.incident) return 'решений надзора не найдено';
+      return s.safety.incident.active ? 'действует' : `снято ${s.safety.incident.until}`;
+    },
+  },
+  {
+    label: 'Уровень цен',
+    get: (s) => s.priceLevel.title + (s.priceLevel.estimate ? ' (оценка)' : ''),
+    mint: true,
+  },
+  { label: 'Почему такой уровень', get: (s) => s.priceLevel.why[0] || '—' },
+  {
+    label: 'Довезёт сюда',
+    get: (s) => s.coverage.reason
+      || (s.coverage.all ? 'возит по всей России' : s.coverage.regions.join(', ') || '—'),
+  },
+  { label: 'Профиль заполнен', get: (s) => `${s.profile.percent}% · ${s.profile.filled} из ${s.profile.total} полей` },
   {
     label: 'Проверка поставщика',
     get: (s) => {
       if (s.trustTier === 'trusted') return `поставщик сетей: ${s.clients.join(', ') || 'HoReCa'}`;
-      if (s.trustTier === 'blocked') return `санкции надзора: ${dash(s.incident.sanction)}`;
+      if (s.trustTier === 'blocked') return 'в списке санитарных решений';
       return 'в кураторских списках нет';
     },
   },
@@ -71,21 +91,23 @@ export const COMPARE_ROWS = [
     get: (s) => (s.commentsRating ? `${s.commentsRating} из 5 по ${s.commentsCount} комм.` : 'нет комментариев'),
   },
   {
-    label: 'Оценка в справочниках',
+    label: 'Внешние отзывы',
     get: (s) => {
-      const found = ratingOf(s);
-      if (!found) return 'нет в подключённых источниках';
-      const count = found.reviews
-        ? ` по ${found.reviews} ${plural(found.reviews, 'отзыву', 'отзывам', 'отзывам')}`
+      const box = s.reviewsSummary || {};
+      if (box.externalAverage === null || box.externalAverage === undefined) {
+        return 'нет в подключённых источниках';
+      }
+      const count = box.externalCount
+        ? ` по ${box.externalCount} ${plural(box.externalCount, 'отзыву', 'отзывам', 'отзывам')}`
         : '';
-      return `${found.rating} из 5 · ${found.source}${count}`;
+      return `${box.externalAverage} из 5${count}`;
     },
   },
   { label: 'Статус в ФНС', get: (s) => dash(s.legalStatus) },
   { label: 'ОКВЭД', get: (s) => dash([s.okved, s.okvedName].filter(Boolean).join(' ')) },
   { label: 'Регион работы', get: (s) => dash(s.geo || s.region) },
   { label: 'Минимальный заказ', get: (s) => dash(s.moq) },
-  { label: 'Цена', get: (s) => dash(s.priceList ? 'прайс-лист на сайте' : s.price) },
+  { label: 'Цена из источников', get: (s) => dash(s.priceList ? 'прайс-лист на сайте' : s.price) },
   { label: 'Документы', get: (s) => (s.certs.length ? s.certs.join(', ') : 'не найдены') },
   { label: 'Доставка', get: (s) => dash(s.delivery) },
   { label: 'Юрлицо', get: (s) => dash(s.legalName) },
@@ -111,17 +133,25 @@ export function ageText(days) {
 
 export function quoteLetter(s) {
   const subject = `Запрос коммерческого предложения — ${s.name}`;
+  const gaps = (s.profile ? s.profile.missing : []).map((item) => item.title);
+  const need = (title, line) => (gaps.includes(title) ? [line] : []);
+
   const body = [
     'Здравствуйте!',
     '',
-    `Мы ресторан, подбираем поставщика по направлению «${s.cats[0] || 'продукты'}».`,
-    'Пришлите, пожалуйста, коммерческое предложение:',
+    `Мы закупаем продукты для сети общепита, направление «${s.cats[0] || 'продукты'}».`,
+    'Просим прислать коммерческое предложение и документы:',
     '',
-    '— актуальный прайс;',
-    '— минимальный заказ и условия отгрузки;',
-    '— сроки и стоимость доставки' + (s.city ? ` в ${s.city}` : '') + ';',
-    '— документы на продукцию (декларации, ХАССП);',
-    '— условия оплаты и возможность отсрочки.',
+    ...need('Цена', '— актуальный прайс-лист;'),
+    ...need('Минимальный заказ', '— минимальный заказ и шаг отгрузки;'),
+    ...need('Доставка', `— сроки и стоимость доставки${s.city ? ` в ${s.city}` : ''};`),
+    ...need('Документы', '— декларации ТР ТС и протоколы лабораторных испытаний;'),
+    ...need('ИНН', '— ИНН и реквизиты для проверки юрлица;'),
+    ...need('География поставок', '— в какие города возите своим транспортом;'),
+    '— условия оплаты и возможность отсрочки;',
+    '— контакт менеджера, который ведёт сетевых клиентов.',
+    '',
+    'Если по части пунктов есть готовая презентация — пришлите её, сэкономим время.',
     '',
     'Спасибо, ждём ответа.',
   ].join('\n');

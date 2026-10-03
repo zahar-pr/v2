@@ -17,10 +17,15 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 import db
 import domain
+import dossier
 import index
 import main
+import pricing
+import reach
+import safety
 import scoring
 import store
+import workspace
 from fastapi.testclient import TestClient
 from sources import egrul, fns, wikidata, zoon
 
@@ -515,6 +520,183 @@ check(
     "неизвестный город -> 404",
     client.get("/api/suppliers", params={"city": "Атлантида"}).status_code == 404,
 )
+
+# ---------- санитарная история ----------
+
+poisoner = {"name": "Гумарова Луиза Ф. (ИП)", "name_key": "гумаровалуизафип"}
+expired = {"name": "Логинова Н. Ш. (ИП)", "name_key": "логинованшип"}
+clean = {"name_key": "нет", "legal_active": 1, "okved": "10.71", "certs": []}
+docs = {"name_key": "нет", "legal_active": 1, "certs": ["Декларация ТР ТС"]}
+closed = {"name_key": "нет", "legal_status": "Есть запись о прекращении", "legal_active": 0}
+
+check("массовое отравление: решение не истекает", safety.state_of(poisoner)["state"] == "banned")
+check("массовое отравление: потолок ноль", safety.state_of(poisoner)["cap"] == 0)
+check(
+    "истёкшая приостановка: случай остаётся",
+    safety.state_of(expired)["state"] == "incident",
+    safety.state_of(expired)["state"],
+)
+check("истёкшая приостановка: срок снят в тексте", "закончилась" in safety.state_of(expired)["text"])
+check("чистая сверка: положительный тон", safety.state_of(clean)["tone"] == "ok")
+check("документы поднимают санитарный балл", safety.state_of(docs)["score"] > safety.state_of(clean)["score"])
+check(
+    "прекращённое юрлицо видно отдельно",
+    safety.state_of(closed)["state"] == "closed",
+    safety.state_of(closed)["state"],
+)
+check("прекращённое юрлицо ограничено потолком", safety.state_of(closed)["cap"] == 45)
+check(
+    "сверка по ИНН важнее названия",
+    safety.find({"inn": "", "name_key": "гумаровалуизафип"}) is not None,
+)
+
+sanitary = client.get("/api/suppliers", params={"preset": "safe"}).json()
+check("пресет «Безопасность еды» работает", sanitary["preset"] == "safe")
+check(
+    "санитарное решение держит балл внизу",
+    cards["x"]["score"] == 0 and cards["x"]["safety"] is not None,
+)
+
+# ---------- уровень цен ----------
+
+check(
+    "производство дешевле дистрибьютора",
+    pricing.ORDER.index(pricing.level({"kind_class": "producer"})["tier"])
+    < pricing.ORDER.index(pricing.level({"kind_class": "wholesale"})["tier"]),
+)
+check("розница дороже всех", pricing.level({"kind_class": "retail"})["tier"] == "high")
+check(
+    "объём сбивает цену",
+    pricing.level({"kind_class": "wholesale", "moq_value": 2000})["tier"] == "low",
+)
+check(
+    "федеральный поставщик — контрактная цена",
+    pricing.level({"kind_class": "producer", "geo": "вся РФ"})["tier"] == "contract",
+)
+check("уровень цен помечен оценкой", pricing.level({"kind_class": "producer"})["estimate"] is True)
+check(
+    "названная цена снимает пометку",
+    pricing.level({"kind_class": "producer", "price": "от 90 ₽/кг"})["estimate"] is False,
+)
+check("у уровня цен есть основания", len(pricing.level({"kind_class": "producer"})["why"]) > 0)
+
+cheap = client.get("/api/suppliers", params={"sort": "Сначала дешёвые"}).json()["items"]
+# кураторские метки сильнее сортировки, поэтому смотрим обычные карточки
+plain = [i["priceLevel"]["tier"] for i in cheap if not i["trustTier"]]
+check(
+    "сортировка по цене: дешёвые выше дорогих",
+    plain == sorted(plain, key=lambda tier: ["low", "contract", "mid", "high"].index(tier)),
+    [(i["id"], i["priceLevel"]["tier"]) for i in cheap],
+)
+check(
+    "фильтр по уровню цен",
+    all(
+        i["priceLevel"]["tier"] == "low"
+        for i in client.get("/api/suppliers", params={"price": "low"}).json()["items"]
+    ),
+)
+
+# ---------- досье: ни одного тупика ----------
+
+sheet = dossier.profile({"phones": ["+7"], "inn": "1600000000"})
+check("профиль считает полноту", 0 < sheet["percent"] < 100, sheet["percent"])
+check("у каждого пробела есть объяснение", all(item["why"] for item in sheet["missing"]))
+links = dossier.registries({"inn": "1600000000", "name": "Тест"})
+check("реестры подставляют ИНН", all("1600000000" in item["url"] for item in links))
+check("реестров девять", len(links) == 9, len(links))
+check(
+    "без ИНН ссылки ищут по названию",
+    all(not item["byInn"] for item in dossier.registries({"name": "Тест"})),
+)
+card_full = client.get("/api/suppliers/a").json()
+check("в карточке есть досье", card_full["profile"]["total"] > 10)
+check("в карточке есть реестры", len(card_full["registries"]) == 9)
+check("в карточке есть санитарный вывод", bool(card_full["safety"]["title"]))
+check("в карточке есть уровень цен", bool(card_full["priceLevel"]["title"]))
+
+# ---------- довезут ли в мой город ----------
+
+check("вся Россия покрывает любой регион", reach.delivers({"geo": "вся РФ"}, "Урал"))
+check(
+    "регион из текста географии виден",
+    "Урал" in reach.coverage({"geo": "Екатеринбург, Челябинск"})[1],
+)
+check("город склоняется", reach.where_in("Екатеринбург") == "в Екатеринбурге")
+check("исключения склонения учтены", reach.where_in("Владимир") == "во Владимире")
+check(
+    "подпись объясняет, почему поставщик в выдаче",
+    "всей России" in reach.reason({"geo": "вся РФ"}, "Екатеринбург"),
+)
+
+store.save_enrichment("t", {"geo": "вся РФ"})
+index.score_one(store.get("t"))
+wide = client.get("/api/suppliers", params={"city": "Екатеринбург"}).json()
+check(
+    "федеральный поставщик виден в чужом городе",
+    any(i["id"] == "t" for i in wide["items"]),
+    [i["id"] for i in wide["items"]],
+)
+narrow = client.get(
+    "/api/suppliers", params={"city": "Екатеринбург", "delivers": "false"}
+).json()
+check("галочку «кто довезёт» можно снять", narrow["total"] <= wide["total"])
+
+# ---------- отзывы ----------
+
+check(
+    "внешние оценки собраны в блок",
+    card_full["reviewsSummary"]["verdict"] and "external" in card_full["reviewsSummary"],
+)
+demo = client.get("/api/suppliers/t").json()["reviewsSummary"]
+check("демонстрационные строки помечены", all(row["demo"] for row in demo["external"]))
+check("у витрины есть средняя оценка", demo["externalAverage"] is not None)
+
+# ---------- кабинет Goulash Tech ----------
+
+desk = client.get("/api/workspace").json()
+check("кабинет отдаёт проекты", len(desk["projects"]) == 19, len(desk["projects"]))
+check("у проекта есть город и категории", all(p["cats"] for p in desk["projects"]))
+check("проект считает поставщиков", all("found" in p for p in desk["projects"]))
+check(
+    "санитарные дела привязаны к сети",
+    any(p["incidents"] for p in desk["projects"]),
+)
+check("в кабинете видна воронка", "working" in desk and "quoted" in desk)
+check("кабинет один и без логина", "login" not in str(desk).lower())
+check(
+    "у каждой сети-клиента свой проект",
+    len({p["chain"] for p in desk["projects"]}) == len(desk["projects"]),
+)
+
+# ---------- фильтр «с кем можно работать» ----------
+
+safe_only = client.get("/api/suppliers", params={"onlySafe": True}).json()
+check(
+    "фильтр убирает санитарные решения",
+    all(i["safety"]["state"] not in ("banned", "incident", "closed") for i in safe_only["items"]),
+)
+check("счётчик рискованных есть в фасетах", "risky" in safe_only["facets"])
+check("средняя полнота есть в фасетах", "fullness" in safe_only["facets"])
+check("счётчики по цене есть в фасетах", set(safe_only["facets"]["prices"]) == {"low", "mid", "high", "contract"})
+
+# ---------- непищевое не лезет в выдачу еды ----------
+
+import catalog
+
+check("непищевые категории объявлены", "equipment" in catalog.NON_FOOD_CATEGORIES)
+check(
+    "оборудование не попадает в поиск еды",
+    all(
+        "equipment" not in (store.get(i["id"]) or {}).get("cats", "")
+        for i in client.get("/api/suppliers", params={"category": "all"}).json()["items"]
+    ),
+)
+
+# ---------- витрина демо-данных объявлена в памятке ----------
+
+check("памятка предупреждает про демо-данные", "демонстрационное" in intro_jsx)
+check("памятка объясняет санитарную историю", "санитарная истори" in intro_jsx.lower())
+check("памятка объясняет уровень цен", "уровень цен" in intro_jsx.lower())
 
 print()
 print(f"{sum(ok)}/{len(ok)} проверок прошло")

@@ -296,7 +296,11 @@ def state_of(supplier: dict) -> dict:
         return {
             "state": CLEAN,
             "tone": "ok",
-            "title": "Поставщик прошёл аудит федеральных сетей",
+            "title": (
+                "Поставщик прошёл аудит федеральных сетей"
+                if named
+                else "Крупный федеральный поставщик HoReCa"
+            ),
             "text": (
                 f"{checked}. "
                 + (

@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import StatusPicker from './StatusPicker.jsx';
 import Comments from './Comments.jsx';
+import SafetyBadge from './SafetyBadge.jsx';
+import PriceTag from './PriceTag.jsx';
 import { setCheck } from '../api/client.js';
-import { ageText, checkedAt, dash, placeOf, plural, quoteLetter, ratingOf } from '../data/suppliers.js';
+import { ageText, checkedAt, dash, placeOf, plural, quoteLetter } from '../data/suppliers.js';
 
 export default function SupplierPanel({
   supplier, note, statuses, onNote, onStatus, onComment,
@@ -10,7 +12,9 @@ export default function SupplierPanel({
 }) {
   const s = supplier;
   const [done, setDone] = useState(() => new Set(supplier.checksDone || []));
+  const [allGaps, setAllGaps] = useState(false);
   const tel = (value) => value.replace(/[^+\d]/g, '');
+  const reviews = s.reviewsSummary || {};
 
   useEffect(() => {
     setDone(new Set(supplier.checksDone || []));
@@ -59,6 +63,8 @@ export default function SupplierPanel({
     ['На рынке', dash(s.years)],
   ];
 
+  const gaps = allGaps ? s.profile.missing : s.profile.missing.slice(0, 6);
+
   return (
     <>
       <button type="button" className="scrim" aria-label="Закрыть" onClick={onClose} />
@@ -79,25 +85,66 @@ export default function SupplierPanel({
                 {checkedAt(s) ? ` · проверено ${checkedAt(s)}` : ''}
               </small>
             </div>
-            <span className={`badge ${s.verified ? 'badge--ok' : 'badge--warn'}`}>
-              {s.verified ? 'Данные подтверждены' : 'Требует проверки'}
-            </span>
+            <PriceTag price={s.priceLevel} />
           </div>
 
-          {s.legalClosed && (
-            <div className="alarm">
-              В ЕГРЮЛ есть запись о прекращении деятельности — проверьте статус юрлица перед сделкой.
-            </div>
+          {s.coverage && s.coverage.reason && (
+            <div className="reachline">{s.coverage.reason}</div>
           )}
 
           {s.about && <p className="panel__about">{s.about}</p>}
 
           <div>
-            {s.trustTier && (
-              <div className={`verdictbox verdictbox--${s.trustTier}`}>
-                <div className="verdictbox__title">
-                  {s.trustTier === 'trusted' ? s.verdict : 'Не рекомендуем к работе'}
+            <div className="section-title">Санитарная история</div>
+            <div className={`safebox safebox--${s.safety.tone}`}>
+              <div className="safebox__head">
+                <SafetyBadge safety={s.safety} compact />
+              </div>
+              <p className="safebox__text">{s.safety.text}</p>
+
+              {s.safety.incident && (
+                <div className="safebox__grid">
+                  <div><span>Решение</span><b>{s.safety.incident.date}</b></div>
+                  {s.safety.incident.days > 0 && (
+                    <div>
+                      <span>Срок приостановки</span>
+                      <b>
+                        {s.safety.incident.days} суток
+                        {s.safety.incident.until ? ` · до ${s.safety.incident.until}` : ''}
+                      </b>
+                    </div>
+                  )}
+                  <div>
+                    <span>Ограничение сейчас</span>
+                    <b>{s.safety.incident.active ? 'действует' : 'снято'}</b>
+                  </div>
+                  {s.safety.incident.chain && (
+                    <div><span>Возил в сеть</span><b>{s.safety.incident.chain}</b></div>
+                  )}
                 </div>
+              )}
+
+              {s.safety.incident && s.safety.incident.source && (
+                <a
+                  className="source" href={s.safety.incident.source}
+                  target="_blank" rel="noreferrer"
+                >
+                  {s.safety.incident.sourceTitle || 'Публикация'} ↗
+                </a>
+              )}
+
+              {s.safety.docs.length > 0 && (
+                <div className="safebox__docs">
+                  {s.safety.docs.map((item) => <span className="cert" key={item}>{item}</span>)}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            {s.trustTier === 'trusted' && (
+              <div className="verdictbox verdictbox--trusted">
+                <div className="verdictbox__title">{s.verdict}</div>
 
                 {s.clients.length > 0 && (
                   <div className="verdictbox__part">
@@ -126,14 +173,6 @@ export default function SupplierPanel({
 
                 <p className="verdictbox__text">{s.trustNote}</p>
 
-                {s.trustTier === 'blocked' && s.incident.risk && (
-                  <div className="verdictbox__meta">
-                    Риск: {s.incident.risk.toLowerCase()}
-                    {s.incident.date ? ` · ${s.incident.date}` : ''}
-                    {s.incident.chain ? ` · сеть «${s.incident.chain}»` : ''}
-                  </div>
-                )}
-
                 {s.sources.length > 0 && (
                   <div className="verdictbox__part">
                     <div className="verdictbox__label">Чем подтверждается</div>
@@ -149,6 +188,79 @@ export default function SupplierPanel({
               </div>
             )}
 
+            <div className="section-title">Уровень цен</div>
+            <div className={`pricebox pricebox--${s.priceLevel.tier}`}>
+              <div className="pricebox__head">
+                <b>{s.priceLevel.title}</b>
+                <span>{s.priceLevel.hint}</span>
+              </div>
+              <ul className="pricebox__why">
+                {s.priceLevel.why.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+              {s.priceLevel.estimate && (
+                <div className="pricebox__note">
+                  Это оценка уровня, а не цена из прайса: прайс запрашивается у поставщика.
+                  Сравнить с текущим можно сразу после первого КП.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="section-title">
+              Отзывы
+              {reviews.demo && <span className="demo">часть строк — демо</span>}
+            </div>
+            <div className="revbox">
+              <div className="revbox__verdict">{reviews.verdict}</div>
+
+              {reviews.teamCount > 0 && (
+                <div className="revrow">
+                  <div className="revrow__score">
+                    {reviews.teamRating ? reviews.teamRating : '—'}
+                  </div>
+                  <div className="revrow__body">
+                    <b>Коллеги в Goulash</b>
+                    <small>
+                      {reviews.teamCount}{' '}
+                      {plural(reviews.teamCount, 'комментарий', 'комментария', 'комментариев')}
+                      {' '}— ниже на этой странице
+                    </small>
+                  </div>
+                </div>
+              )}
+
+              {reviews.external.map((item) => (
+                <div className="revrow" key={item.id + item.source}>
+                  <div className="revrow__score">{item.rating}</div>
+                  <div className="revrow__body">
+                    <b>
+                      {item.source}
+                      {item.demo && <span className="demo demo--inline">демо</span>}
+                    </b>
+                    <small>
+                      {item.count
+                        ? `${item.count} ${plural(item.count, 'отзыв', 'отзыва', 'отзывов')}`
+                        : 'оценка без счётчика'}
+                    </small>
+                  </div>
+                  {item.url && (
+                    <a href={item.url} target="_blank" rel="noreferrer">Открыть ↗</a>
+                  )}
+                </div>
+              ))}
+
+              <div className="sources">
+                {s.reviewLinks.map((item) => (
+                  <a className="source" key={item.url} href={item.url} target="_blank" rel="noreferrer">
+                    {item.title} ↗
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
             <div className="section-title">Почему такой приоритет</div>
             <div className="scorecard">
               {s.factors.map((f) => (
@@ -203,6 +315,43 @@ export default function SupplierPanel({
           </div>
 
           <div>
+            <div className="section-title">
+              Профиль заполнен на {s.profile.percent}%
+            </div>
+            <div className="fill">
+              <div className="fill__track">
+                <span className="fill__bar" style={{ width: `${s.profile.percent}%` }} />
+              </div>
+              <div className="fill__count">
+                {s.profile.filled} из {s.profile.total} полей
+              </div>
+            </div>
+            {s.profile.missing.length > 0 && (
+              <>
+                <div className="fill__hint">
+                  Чего не хватает и зачем это нужно — спросите в первом разговоре:
+                </div>
+                <div className="gaps">
+                  {gaps.map((item) => (
+                    <div className="gap" key={item.title}>
+                      <b>{item.title}</b>
+                      <span>{item.why}</span>
+                    </div>
+                  ))}
+                </div>
+                {s.profile.missing.length > 6 && (
+                  <button
+                    type="button" className="fill__more"
+                    onClick={() => setAllGaps((v) => !v)}
+                  >
+                    {allGaps ? 'Свернуть' : `Показать все ${s.profile.missing.length}`}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
+          <div>
             <div className="section-title">Документы</div>
             <div className="certs">
               {(s.certs.length ? s.certs : ['Документы не найдены в открытых источниках']).map((c) => (
@@ -229,42 +378,17 @@ export default function SupplierPanel({
           </div>
 
           <div>
-            <div className="section-title">Отзывы и оценки</div>
-            {s.commentsRating ? (
-              <div className="reviews">
-                <div className="reviews__score">{s.commentsRating}</div>
-                <div>
-                  <div className="reviews__count">
-                    оценка команды по {s.commentsCount}{' '}
-                    {plural(s.commentsCount, 'комментарию', 'комментариям', 'комментариям')}
-                  </div>
-                  <small>её поставили вы и ваши коллеги ниже на этой странице</small>
-                </div>
-              </div>
-            ) : null}
-            {ratingOf(s) ? (
-              <div className="reviews">
-                <div className="reviews__score">{s.rating.toFixed(1)}</div>
-                <div>
-                  <div className="reviews__count">
-                    {s.reviews
-                      ? `${s.reviews} ${plural(s.reviews, 'отзыв', 'отзыва', 'отзывов')} на ${s.reviewsSource}`
-                      : `оценка на ${s.reviewsSource}`}
-                  </div>
-                  {s.reviewsUrl && (
-                    <a href={s.reviewsUrl} target="_blank" rel="noreferrer">Прочитать отзывы ↗</a>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="reviews reviews--empty">
-                Оценок в подключённых справочниках не нашлось. Посмотрите сами:
-              </div>
-            )}
-            <div className="sources">
-              {s.reviewLinks.map((item) => (
-                <a className="source" key={item.url} href={item.url} target="_blank" rel="noreferrer">
-                  {item.title} ↗
+            <div className="section-title">Проверить самому</div>
+            <div className="regs__hint">
+              {s.inn
+                ? `Девять государственных реестров с подставленным ИНН ${s.inn} — открывается в один клик.`
+                : 'ИНН мы не нашли, поэтому ссылки открывают поиск по названию компании.'}
+            </div>
+            <div className="regs">
+              {s.registries.map((item) => (
+                <a className="reg" key={item.id} href={item.url} target="_blank" rel="noreferrer">
+                  <b>{item.title}</b>
+                  <span>{item.why}</span>
                 </a>
               ))}
             </div>
