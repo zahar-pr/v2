@@ -71,9 +71,9 @@ export const COMPARE_ROWS = [
   },
   { label: 'Почему такой уровень', get: (s) => s.priceLevel.why[0] || '—' },
   {
-    label: 'Довезёт сюда',
+    label: 'Куда возит',
     get: (s) => s.coverage.reason
-      || (s.coverage.all ? 'возит по всей России' : s.coverage.regions.join(', ') || '—'),
+      || (s.coverage.all ? 'по всей России' : s.coverage.regions.join(', ') || '—'),
   },
   { label: 'Профиль заполнен', get: (s) => `${s.profile.percent}% · ${s.profile.filled} из ${s.profile.total} полей` },
   {

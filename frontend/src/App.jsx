@@ -18,7 +18,7 @@ import useDebounced from './hooks/useDebounced.js';
 import {
   getCallList, getMeta, getNotes, getStatus, getSuppliers, getWorkspace, saveNote, setStatus,
 } from './api/client.js';
-import { weightsToString } from './data/suppliers.js';
+import { plural, weightsToString } from './data/suppliers.js';
 
 const MAX_COMPARE = 3;
 const SKELETONS = [0, 1, 2, 3, 4, 5];
@@ -371,7 +371,11 @@ export default function App() {
     if (loading) return 'Подбираем поставщиков';
     if (indexing) return `Индекс наполняется: ${status.citiesDone} из ${status.citiesTotal} городов`;
     if (!stats) return '';
-    return `${stats.producers} производств и ${stats.wholesale} оптовых баз в ${stats.citiesIndexed} городах · каждая сверена с перечнями Роспотребнадзора`;
+    const mills = plural(stats.producers, 'производство', 'производства', 'производств');
+    const bases = plural(stats.wholesale, 'оптовая база', 'оптовых базы', 'оптовых баз');
+    const towns = plural(stats.citiesIndexed, 'городе', 'городах', 'городах');
+    return `${stats.producers} ${mills} и ${stats.wholesale} ${bases} в ${stats.citiesIndexed} ${towns}`
+      + ' · все сверены с перечнями Роспотребнадзора';
   };
 
   return (
