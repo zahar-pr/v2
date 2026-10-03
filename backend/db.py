@@ -61,6 +61,12 @@ CREATE TABLE IF NOT EXISTS suppliers (
     verified_by TEXT NOT NULL DEFAULT '',
     score INTEGER NOT NULL DEFAULT 0,
     haystack TEXT NOT NULL DEFAULT '',
+    score_safety INTEGER NOT NULL DEFAULT 0,
+    safety_state TEXT NOT NULL DEFAULT '',
+    price_tier TEXT NOT NULL DEFAULT '',
+    profile_percent INTEGER NOT NULL DEFAULT 0,
+    delivers_all INTEGER NOT NULL DEFAULT 0,
+    delivery_regions TEXT NOT NULL DEFAULT '',
     score_reach INTEGER NOT NULL DEFAULT 0,
     score_volume INTEGER NOT NULL DEFAULT 0,
     score_docs INTEGER NOT NULL DEFAULT 0,
@@ -200,6 +206,14 @@ ADDED_COLUMNS = (
     ("clients", "TEXT NOT NULL DEFAULT '[]'"),
     ("incident", "TEXT NOT NULL DEFAULT '[]'"),
     ("products", "TEXT NOT NULL DEFAULT '[]'"),
+    # санитарная история, ценовой уровень и охват доставки — выводятся при пересчёте
+    # балла и хранятся колонками, чтобы по ним можно было фильтровать и сортировать
+    ("score_safety", "INTEGER NOT NULL DEFAULT 0"),
+    ("safety_state", "TEXT NOT NULL DEFAULT ''"),
+    ("price_tier", "TEXT NOT NULL DEFAULT ''"),
+    ("profile_percent", "INTEGER NOT NULL DEFAULT 0"),
+    ("delivers_all", "INTEGER NOT NULL DEFAULT 0"),
+    ("delivery_regions", "TEXT NOT NULL DEFAULT ''"),
 )
 
 
@@ -244,6 +258,9 @@ def _migrate(connection: sqlite3.Connection) -> None:
     for column in DROPPED_COLUMNS:
         if column in known:
             connection.execute(f"ALTER TABLE suppliers DROP COLUMN {column}")
+
+    # индексы по добавленным колонкам — только после ALTER TABLE выше
+    connection.execute("CREATE INDEX IF NOT EXISTS suppliers_safety ON suppliers(safety_state)")
 
     _rebuild_team_table(connection, "pipeline", "status")
     _rebuild_team_table(connection, "notes", "text")

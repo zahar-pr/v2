@@ -4,6 +4,9 @@ import time
 import aiohttp
 import catalog
 import domain
+import dossier
+import pricing
+import reach
 import scoring
 import store
 from sources import active
@@ -148,6 +151,14 @@ def score_one(row: dict) -> dict:
     factors = scoring.evaluate(scoring.with_age(row))
     scores = {factor.id: factors[factor.id]["score"] for factor in scoring.FACTORS}
     scores["total"] = scoring.total(factors, scoring.weights_of(scoring.DEFAULT_PRESET), row)
+
+    everywhere, regions = reach.coverage(row)
+    scores["safety_state"] = factors["safety"].get("state", "")
+    scores["price_tier"] = pricing.level(row)["tier"]
+    scores["profile_percent"] = dossier.profile(row)["percent"]
+    scores["delivers_all"] = everywhere
+    scores["delivery_regions"] = "," + ",".join(regions) + "," if regions else ""
+
     store.save_scores(row["id"], scores)
     return scores
 

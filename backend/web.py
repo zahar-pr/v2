@@ -13,12 +13,16 @@ COOKIE = "provizia_user"
 COOKIE_AGE = 60 * 60 * 24 * 365
 PER_PAGE = 12
 MAX_PER_PAGE = 60
+PRICE_TIERS = ("low", "mid", "high", "contract")
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 
 RELAX_LABELS = {
     "only_docs": "Без условия «с документами»",
     "only_verified": "Без условия «подтверждённые»",
     "only_contacts": "Вместе с теми, у кого нет контактов",
+    "only_safe": "Вместе с закрытыми и теми, у кого был инцидент",
+    "price": "Любой уровень цен",
+    "delivers": "Только зарегистрированные в городе",
     "kinds": "Вместе с розницей",
     "query": "Без строки поиска",
     "category": "Все категории",
@@ -46,6 +50,9 @@ class Filters:
     only_docs: bool = False
     only_verified: bool = False
     only_contacts: bool = False
+    only_safe: bool = False
+    price: str = ""
+    delivers: bool = True
     status: str = ""
     preset: str = scoring.DEFAULT_PRESET
     weights: dict = field(default_factory=dict)
@@ -61,6 +68,9 @@ class Filters:
             only_docs=self.only_docs,
             only_verified=self.only_verified,
             only_contacts=self.only_contacts,
+            only_safe=self.only_safe,
+            price=self.price,
+            delivers=self.delivers,
             status=self.status,
             weights=self.weights,
             sort=self.sort,
@@ -78,6 +88,9 @@ class Filters:
             "only_docs": self.only_docs,
             "only_verified": self.only_verified,
             "only_contacts": self.only_contacts,
+            "only_safe": self.only_safe,
+            "price": self.price,
+            "delivers": self.delivers,
             "status": self.status,
             "weights": self.weights,
         }
@@ -92,6 +105,9 @@ def filters(
     onlyDocs: bool = Query(False),
     onlyVerified: bool = Query(False),
     onlyContacts: bool = Query(False),
+    onlySafe: bool = Query(False),
+    price: str = Query(""),
+    delivers: bool = Query(True),
     status: str = Query(""),
     preset: str = Query(scoring.DEFAULT_PRESET),
     weights: str = Query(""),
@@ -112,6 +128,9 @@ def filters(
         only_docs=onlyDocs,
         only_verified=onlyVerified,
         only_contacts=onlyContacts,
+        only_safe=onlySafe,
+        price=price if price in PRICE_TIERS else "",
+        delivers=delivers,
         status=status,
         preset=preset,
         weights=weights_of(preset, weights),
@@ -156,17 +175,19 @@ def checks(rows: list[dict]) -> dict:
     return {row["id"]: team.checks_of(row["id"]) for row in rows}
 
 
-def cards(rows: list[dict], weights: dict) -> list[dict]:
+def cards(rows: list[dict], weights: dict, city: str = "") -> list[dict]:
     saved_notes, statuses = notes(), team.statuses_of()
     return [
-        payload.card(row, saved_notes, statuses, weights, rank=number + 1, checks=checks(rows))
+        payload.card(
+            row, saved_notes, statuses, weights, rank=number + 1, checks=checks(rows), city=city
+        )
         for number, row in enumerate(rows)
     ]
 
 
-def by_score(rows: list[dict], weights: dict) -> list[dict]:
+def by_score(rows: list[dict], weights: dict, city: str = "") -> list[dict]:
     """Карточки по убыванию приоритета: нумерация в списке обзвона должна совпадать с ним."""
-    ranked = sorted(cards(rows, weights), key=lambda item: -item["score"])
+    ranked = sorted(cards(rows, weights, city), key=lambda item: -item["score"])
     for number, item in enumerate(ranked, 1):
         item["rank"] = number
     return ranked

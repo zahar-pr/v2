@@ -11,6 +11,7 @@ import payload
 import store
 import team
 import web
+import workspace
 from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import Response as RawResponse
@@ -102,6 +103,12 @@ def api_meta():
     return answer
 
 
+@app.get("/api/workspace")
+def api_workspace():
+    """Кабинет Goulash Tech: проекты сетей, воронка и последние действия команды."""
+    return workspace.overview()
+
+
 @app.get("/api/status")
 def api_status():
     return {"stats": store.stats(), "status": payload.status(index.state)}
@@ -127,6 +134,7 @@ async def api_suppliers(
         chosen.weights,
         chosen.preset,
         checks=web.checks(rows),
+        city=chosen.city,
     )
     if not found:
         answer["relax"] = store.relax_options(chosen.as_dict(), web.RELAX_LABELS)
@@ -154,8 +162,8 @@ def api_calllist(
     ]
 
     return {
-        "working": web.by_score(store.get_many(working), chosen.weights),
-        "suggest": web.by_score(suggest[: limit * 2], chosen.weights)[:limit],
+        "working": web.by_score(store.get_many(working), chosen.weights, chosen.city),
+        "suggest": web.by_score(suggest[: limit * 2], chosen.weights, chosen.city)[:limit],
         "weights": chosen.weights,
         "preset": chosen.preset,
     }
@@ -168,7 +176,7 @@ def api_export(
     limit: int = Query(EXPORT_LIMIT, ge=1, le=1000),
 ):
     rows, _, _ = chosen.search(1, limit)
-    body = "﻿" + payload.to_csv(web.cards(rows, chosen.weights))
+    body = "﻿" + payload.to_csv(web.cards(rows, chosen.weights, chosen.city))
     return RawResponse(
         content=body.encode("utf-8"),
         media_type="text/csv; charset=utf-8",
@@ -191,6 +199,7 @@ def api_supplier(
         team.statuses_of(),
         chosen.weights,
         checks={supplier_id: team.checks_of(supplier_id)},
+        city=chosen.city,
     )
 
 

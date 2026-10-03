@@ -100,6 +100,7 @@ KIND_ORDER = (
 
 
 SCORE_COLUMNS = (
+    "score_safety",
     "score_reach",
     "score_volume",
     "score_docs",
@@ -130,14 +131,29 @@ def priority_sql(weights: dict) -> str:
 
 
 # Проверенные поставщики сетей идут первыми при любой сортировке, компании с
-# санкциями надзора — последними: это вывод, а не один из факторов балла.
-TRUST_ORDER = "CASE trust_tier WHEN 'trusted' THEN 0 WHEN 'blocked' THEN 2 ELSE 1 END ASC"
+# санитарными решениями — последними: это вывод, а не один из факторов балла.
+TRUST_ORDER = (
+    "CASE WHEN safety_state IN ('banned', 'incident') OR trust_tier = 'blocked' THEN 3 "
+    "WHEN safety_state = 'closed' THEN 2 "
+    "WHEN trust_tier = 'trusted' THEN 0 ELSE 1 END ASC"
+)
+
+# Дешевле — ближе к началу: «ниже рынка», контракт, средний, выше рынка.
+PRICE_ORDER = (
+    "CASE price_tier WHEN 'low' THEN 0 WHEN 'contract' THEN 1 WHEN 'mid' THEN 2 "
+    "WHEN 'high' THEN 3 ELSE 4 END"
+)
+
+# «Можно работать»: нет санитарного решения и юрлицо не прекращено.
+RISKY = "safety_state NOT IN ('banned', 'incident', 'closed') AND trust_tier != 'blocked'"
 
 
 def sort_sql(sort: str, weights: dict) -> str:
     priority = priority_sql(weights)
     options = {
         "По приоритету": f"{priority} DESC, name COLLATE NOCASE ASC",
+        "Сначала дешёвые": f"{PRICE_ORDER} ASC, {priority} DESC",
+        "По полноте данных": f"profile_percent DESC, {priority} DESC",
         "По расстоянию": f"distance_km IS NULL, distance_km ASC, {priority} DESC",
         "По минимальному заказу": f"moq_value IS NULL, moq_value ASC, {priority} DESC",
         "По названию": "name COLLATE NOCASE ASC",
@@ -254,6 +270,9 @@ def search(
     only_docs: bool = False,
     only_verified: bool = False,
     only_contacts: bool = False,
+    only_safe: bool = False,
+    price: str = "",
+    delivers: bool = True,
     kinds: tuple[str, ...] = (),
     status: str = "",
     weights: dict | None = None,
@@ -262,7 +281,16 @@ def search(
     per_page: int = 12,
 ) -> tuple[list[dict], int, dict]:
     base, base_values = _conditions(
-        query, region, city, only_docs, only_verified, only_contacts, status
+        query,
+        region,
+        city,
+        only_docs,
+        only_verified,
+        only_contacts,
+        only_safe,
+        price,
+        delivers,
+        status,
     )
     by_cat, cat_values = _category_clause(category)
     by_kind, kind_values = _kind_clause(kinds)
@@ -309,16 +337,26 @@ def _conditions(
     only_docs: bool,
     only_verified: bool,
     only_contacts: bool,
+    only_safe: bool,
+    price: str,
+    delivers: bool,
     status: str,
 ) -> tuple[list[str], list]:
     where, params = ["1=1"], []
 
     if city:
-        where.append("city = ?")
-        params.append(city)
+        clause, values = _place_clause("city", city, catalog.region_of(city), delivers)
+        where.append(clause)
+        params += values
     elif region:
-        where.append("region = ?")
-        params.append(region)
+        clause, values = _place_clause("region", region, region, delivers)
+        where.append(clause)
+        params += values
+    if only_safe:
+        where.append(RISKY)
+    if price:
+        where.append("price_tier = ?")
+        params.append(price)
     if only_docs:
         where.append("certs != '[]'")
     if only_verified:
@@ -332,6 +370,24 @@ def _conditions(
         where.append("haystack LIKE ?")
         params.append(f"%{word}%")
     return where, params
+
+
+def _place_clause(
+    column: str, value: str, region: str, delivers: bool
+) -> tuple[str, list]:
+    """Закупщика интересует не прописка поставщика, а куда он возит.
+
+    Поэтому к местным добавляются те, кто сам заявил поставки по всей России или
+    по этому региону: иначе федеральный поставщик выпадает из выдачи по городу.
+    """
+    if not delivers:
+        return f"{column} = ?", [value]
+    if not region:
+        return f"({column} = ? OR delivers_all = 1)", [value]
+    return (
+        f"({column} = ? OR delivers_all = 1 OR delivery_regions LIKE ?)",
+        [value, f"%,{region},%"],
+    )
 
 
 def _facets(current: Slice, without_kinds: Slice, without_cats: Slice) -> dict:
@@ -355,7 +411,13 @@ def _facets(current: Slice, without_kinds: Slice, without_cats: Slice) -> dict:
     counters = connection.execute(
         f"SELECT SUM(CASE WHEN {HAS_CONTACTS} THEN 1 ELSE 0 END) AS contacts, "
         "SUM(CASE WHEN certs != '[]' THEN 1 ELSE 0 END) AS docs, "
-        "SUM(CASE WHEN verified = 1 THEN 1 ELSE 0 END) AS verified "
+        "SUM(CASE WHEN verified = 1 THEN 1 ELSE 0 END) AS verified, "
+        f"SUM(CASE WHEN {RISKY} THEN 0 ELSE 1 END) AS risky, "
+        "SUM(CASE WHEN price_tier = 'low' THEN 1 ELSE 0 END) AS price_low, "
+        "SUM(CASE WHEN price_tier = 'mid' THEN 1 ELSE 0 END) AS price_mid, "
+        "SUM(CASE WHEN price_tier = 'high' THEN 1 ELSE 0 END) AS price_high, "
+        "SUM(CASE WHEN price_tier = 'contract' THEN 1 ELSE 0 END) AS price_contract, "
+        "AVG(profile_percent) AS fullness "
         f"FROM suppliers WHERE {current.condition}",
         tuple(current.params),
     ).fetchone()
@@ -365,15 +427,26 @@ def _facets(current: Slice, without_kinds: Slice, without_cats: Slice) -> dict:
         "withContacts": counters["contacts"] or 0,
         "withDocs": counters["docs"] or 0,
         "verified": counters["verified"] or 0,
+        "risky": counters["risky"] or 0,
+        "prices": {
+            "low": counters["price_low"] or 0,
+            "mid": counters["price_mid"] or 0,
+            "high": counters["price_high"] or 0,
+            "contract": counters["price_contract"] or 0,
+        },
+        "fullness": round(counters["fullness"] or 0),
     }
 
 
 def save_scores(supplier_id: str, scores: dict) -> None:
+    """Балл по факторам плюс выводы, по которым потом идут фильтры и сортировки."""
     with _lock:
         connection = connect()
         connection.execute(
             "UPDATE suppliers SET score_reach=?, score_volume=?, score_docs=?, "
-            "score_logistics=?, score_trust=?, score_reputation=?, score=?, scored_at=?, "
+            "score_logistics=?, score_trust=?, score_reputation=?, score_safety=?, "
+            "safety_state=?, price_tier=?, profile_percent=?, delivers_all=?, "
+            "delivery_regions=?, score=?, scored_at=?, "
             "rating=CASE WHEN reviews IS NULL THEN ? ELSE rating END WHERE id=?",
             (
                 scores["reach"],
@@ -382,6 +455,12 @@ def save_scores(supplier_id: str, scores: dict) -> None:
                 scores["logistics"],
                 scores["trust"],
                 scores["reputation"],
+                scores["safety"],
+                scores.get("safety_state", ""),
+                scores.get("price_tier", ""),
+                scores.get("profile_percent", 0),
+                1 if scores.get("delivers_all") else 0,
+                scores.get("delivery_regions", ""),
                 scores["total"],
                 time.time(),
                 round(scores["total"] / 20, 1),
@@ -603,8 +682,10 @@ def _without(filters: dict, keys: list[str]) -> dict:
     for key in keys:
         if key == "kinds":
             relaxed["kinds"] = ()
-        elif key in ("only_docs", "only_verified", "only_contacts"):
+        elif key in ("only_docs", "only_verified", "only_contacts", "only_safe"):
             relaxed[key] = False
+        elif key == "delivers":
+            relaxed[key] = True
         else:
             relaxed[key] = ""
     return relaxed

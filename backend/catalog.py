@@ -327,6 +327,8 @@ AREA_REGIONS = {
 
 SORTS = (
     "По приоритету",
+    "Сначала дешёвые",
+    "По полноте данных",
     "По расстоянию",
     "По минимальному заказу",
     "По названию",
@@ -402,6 +404,11 @@ def title(category_id: str) -> str:
 
 def city(name: str) -> City | None:
     return next((item for item in CITIES if item.name == name), None)
+
+
+def region_of(city_name: str) -> str:
+    found = city(city_name)
+    return found.region if found else ""
 
 
 def region_by_area(area: str) -> str:

@@ -2,6 +2,7 @@ import time
 from dataclasses import dataclass
 
 import domain
+import safety
 
 NEAR_KM = 10
 CITY_KM = 25
@@ -18,6 +19,11 @@ class Factor:
 
 
 FACTORS = (
+    Factor(
+        "safety",
+        "Санитарная история",
+        "Не травила ли компания людей и чем это подтверждается",
+    ),
     Factor("reputation", "Репутация компании", "Что о компании говорят реестры и отзывы"),
     Factor("reach", "Связь", "Как быстро вы дозвонитесь и кому писать"),
     Factor("volume", "Опт и объёмы", "Работает ли с оптом и известны ли условия"),
@@ -29,74 +35,93 @@ FACTORS = (
 PRESETS = {
     "balanced": {
         "title": "Сбалансировано",
-        "hint": "Репутация весит больше всего, дальше опт, связь и доставка",
+        "hint": "Сначала безопасность еды и репутация, потом опт, документы и доставка",
         "weights": {
-            "reputation": 30,
-            "volume": 20,
-            "reach": 17,
-            "docs": 14,
-            "logistics": 12,
-            "trust": 7,
+            "safety": 26,
+            "reputation": 22,
+            "volume": 16,
+            "docs": 13,
+            "logistics": 11,
+            "reach": 8,
+            "trust": 4,
+        },
+    },
+    "safe": {
+        "title": "Безопасность еды",
+        "hint": "Сначала те, у кого чистая санитарная история и документы на продукцию",
+        "weights": {
+            "safety": 46,
+            "docs": 20,
+            "reputation": 16,
+            "trust": 8,
+            "volume": 5,
+            "logistics": 3,
+            "reach": 2,
         },
     },
     "trusted": {
         "title": "Проверенные компании",
         "hint": "Сначала те, о ком есть отзывы и чистая история в реестрах",
         "weights": {
-            "reputation": 40,
-            "docs": 20,
-            "trust": 12,
-            "volume": 12,
-            "reach": 10,
-            "logistics": 6,
+            "reputation": 34,
+            "safety": 24,
+            "docs": 16,
+            "trust": 10,
+            "volume": 8,
+            "reach": 5,
+            "logistics": 3,
         },
     },
     "urgent": {
         "title": "Позвонить сегодня",
         "hint": "Сначала те, у кого есть телефон, часы работы и кто рядом",
         "weights": {
-            "reach": 42,
-            "logistics": 18,
-            "volume": 16,
-            "reputation": 12,
-            "trust": 8,
-            "docs": 4,
+            "reach": 38,
+            "logistics": 16,
+            "safety": 14,
+            "volume": 14,
+            "reputation": 10,
+            "trust": 5,
+            "docs": 3,
         },
     },
     "docs": {
         "title": "Нужны документы",
         "hint": "Сначала те, у кого есть декларации, реквизиты и подтверждённое юрлицо",
         "weights": {
-            "docs": 40,
-            "reputation": 22,
-            "volume": 14,
-            "reach": 12,
-            "trust": 8,
-            "logistics": 4,
+            "docs": 36,
+            "safety": 24,
+            "reputation": 16,
+            "volume": 10,
+            "reach": 8,
+            "trust": 4,
+            "logistics": 2,
         },
     },
     "volume": {
         "title": "Нужен опт",
         "hint": "Сначала производства и базы с понятным минимальным заказом",
         "weights": {
-            "volume": 42,
-            "logistics": 16,
-            "reach": 14,
-            "reputation": 14,
-            "docs": 10,
-            "trust": 4,
+            "volume": 38,
+            "safety": 16,
+            "logistics": 14,
+            "reach": 12,
+            "reputation": 12,
+            "docs": 6,
+            "trust": 2,
         },
     },
     "near": {
         "title": "Везут быстро",
         "hint": "Сначала те, кто рядом, возит сам и отгружает день в день",
         "weights": {
-            "logistics": 42,
-            "reach": 20,
-            "volume": 16,
-            "reputation": 12,
-            "docs": 6,
-            "trust": 4,
+            "logistics": 38,
+            "reach": 18,
+            "safety": 14,
+            "volume": 14,
+            "reputation": 10,
+            "docs": 4,
+            "trust": 2,
         },
     },
 }
@@ -130,6 +155,7 @@ def with_age(row: dict) -> dict:
 
 def evaluate(supplier: dict) -> dict:
     return {
+        "safety": _safety(supplier),
         "reputation": _reputation(supplier),
         "reach": _reach(supplier),
         "volume": _volume(supplier),
@@ -140,17 +166,30 @@ def evaluate(supplier: dict) -> dict:
 
 
 def total(scores: dict, weights: dict, supplier: dict | None = None) -> int:
-    tier = (supplier or {}).get("trust_tier") or ""
-    if tier == TRUSTED:
-        return 100
-    if tier == BLOCKED:
+    if (supplier or {}).get("trust_tier") == BLOCKED:
         return 0
+
     weight_sum = sum(weights.values()) or 1
     points = sum(scores[factor.id]["score"] * weights.get(factor.id, 0) for factor in FACTORS)
-    return round(points / weight_sum)
+    score = round(points / weight_sum)
+
+    # Санитарное решение — не один из факторов, а потолок: сколько бы ни было
+    # телефонов и деклараций, поставщик с остановленным цехом наверх не всплывает.
+    cap = scores.get("safety", {}).get("cap", 100)
+    score = min(score, cap)
+
+    if (supplier or {}).get("trust_tier") == TRUSTED and cap >= 100:
+        return 100
+    return score
 
 
 def verdict_of(score: int, supplier: dict | None = None) -> tuple[str, str]:
+    state = safety.state_of(supplier or {})
+    if state["state"] == safety.BANNED:
+        return "blocked", "Не брать: действует санитарное решение"
+    if state["state"] == safety.INCIDENT:
+        return "risky", "Был санитарный инцидент"
+
     tier = (supplier or {}).get("trust_tier") or ""
     if tier == TRUSTED:
         named = (supplier or {}).get("clients") or []
@@ -192,6 +231,29 @@ class Tally:
         }
 
 
+def _safety(s: dict) -> dict:
+    """Единственный фактор, который может обнулить карточку целиком."""
+    state = safety.state_of(s)
+    tally = Tally()
+    tally.add(state["score"])
+    if state["state"] in (safety.BANNED, safety.INCIDENT):
+        tally.lack(state["title"].lower(), "Запросить протоколы лаборатории за последний квартал")
+    else:
+        tally.add(0, state["title"].lower())
+        docs = safety.food_docs(s)
+        if docs:
+            tally.add(0, "документы на продукцию: " + ", ".join(docs[:3]))
+        else:
+            tally.lack(
+                "документов на продукцию в открытых источниках нет",
+                "Запросить декларацию ТР ТС и протоколы испытаний",
+            )
+    box = tally.box()
+    box["cap"] = state["cap"]
+    box["state"] = state["state"]
+    return box
+
+
 def _reputation(s: dict) -> dict:
     tally = Tally()
     _rate_curated(tally, s)
@@ -210,12 +272,6 @@ def _rate_curated(tally: Tally, s: dict) -> None:
         tally.add(
             60,
             f"поставщик сетей: {where}" if where else "крупный федеральный поставщик HoReCa",
-        )
-    elif tier == BLOCKED:
-        trouble = (s.get("incident") or {}).get("sanction") or "санкции надзора"
-        tally.lack(
-            f"Роспотребнадзор: {trouble.lower()}",
-            "Не работать до снятия ограничений и повторной проверки",
         )
 
 

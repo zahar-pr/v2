@@ -166,9 +166,12 @@ for source in sorted((ROOT / "backend").rglob("*.py")):
 check("модули не зовут несуществующие функции", not missing, missing[:4])
 
 meta = client.get("/api/meta").json()
-check("мета: 6 факторов", len(meta["factors"]) == 6, [f["id"] for f in meta["factors"]])
+check("мета: 7 факторов", len(meta["factors"]) == 7, [f["id"] for f in meta["factors"]])
 check("мета: фактор репутации", any(f["id"] == "reputation" for f in meta["factors"]))
-check("мета: 6 пресетов", len(meta["presets"]) == 6)
+check("мета: фактор санитарной истории", meta["factors"][0]["id"] == "safety")
+check("мета: 7 пресетов", len(meta["presets"]) == 7)
+check("мета: уровни цен", [p["id"] for p in meta["prices"]] == ["low", "contract", "mid", "high"])
+check("мета: сортировка по цене", "Сначала дешёвые" in meta["sorts"])
 check("веса пресетов дают 100", all(sum(p["weights"].values()) == 100 for p in meta["presets"]))
 check(
     "веса не поровну",
@@ -194,7 +197,7 @@ check(
     [(i["id"], i["score"]) for i in base["items"]],
 )
 card = base["items"][0]
-check("раскладка из 6 факторов", len(card["factors"]) == 6)
+check("раскладка из 7 факторов", len(card["factors"]) == 7)
 check("у фактора есть вес", card["factors"][0]["weight"] > 0)
 check("есть «что уточнить»", isinstance(card["ask"], list))
 check("тип подписан", card["typeTitle"] == "Производство")
@@ -285,12 +288,12 @@ check(
     cards["x"]["incident"],
 )
 check(
-    "репутация весит больше всех в «Сбалансировано»",
+    "санитарная история весит больше всех в «Сбалансировано»",
     max(
         scoring.PRESETS["balanced"]["weights"],
         key=scoring.PRESETS["balanced"]["weights"].get,
     )
-    == "reputation",
+    == "safety",
     scoring.PRESETS["balanced"]["weights"],
 )
 check(

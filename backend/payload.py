@@ -5,6 +5,11 @@ from urllib.parse import quote
 
 import catalog
 import domain
+import dossier
+import pricing
+import reach
+import reviews
+import safety
 import scoring
 
 NO_SITE = "—"
@@ -39,6 +44,10 @@ def meta(stats: dict, state: dict, sources: list[dict], defaults: dict | None = 
         "kinds": list(KINDS),
         "supplyKinds": list(SUPPLY_KINDS),
         "statuses": list(STATUSES),
+        "prices": [
+            {"id": key, "title": pricing.TITLES[key], "hint": pricing.HINTS[key]}
+            for key in (pricing.LOW, pricing.CONTRACT, pricing.MID, pricing.HIGH)
+        ],
         "factors": [
             {"id": factor.id, "title": factor.title, "hint": factor.hint}
             for factor in scoring.FACTORS
@@ -59,6 +68,9 @@ def meta(stats: dict, state: dict, sources: list[dict], defaults: dict | None = 
             "sort": catalog.SORTS[0],
             "preset": scoring.DEFAULT_PRESET,
             "kinds": list(SUPPLY_KINDS),
+            "delivers": True,
+            "onlySafe": False,
+            "price": "",
         },
         "labels": {
             "anyCategory": catalog.ANY_CATEGORY_TITLE,
@@ -95,12 +107,21 @@ def page(
     weights: dict,
     preset: str,
     checks: dict | None = None,
+    city: str = "",
 ) -> dict:
     pages = max(1, -(-total // per_page))
     start = (page_number - 1) * per_page
     return {
         "items": [
-            card(row, notes, statuses, weights, rank=start + number + 1, checks=checks or {})
+            card(
+                row,
+                notes,
+                statuses,
+                weights,
+                rank=start + number + 1,
+                checks=checks or {},
+                city=city,
+            )
             for number, row in enumerate(rows)
         ],
         "total": total,
@@ -119,6 +140,7 @@ def card(
     weights: dict,
     rank: int = 0,
     checks: dict | None = None,
+    city: str = "",
 ) -> dict:
     factors = scoring.evaluate(scoring.with_age(row))
     score = scoring.total(factors, weights, row)
@@ -137,6 +159,8 @@ def card(
         **_legal(row),
         **_contacts(row),
         **_trust(row),
+        **_safety(row),
+        **_dossier(row, city),
         **_team(row, notes, statuses, checks or {}),
     }
 
@@ -246,6 +270,37 @@ def _trust(row: dict) -> dict:
     }
 
 
+def _safety(row: dict) -> dict:
+    """Санитарная история и ценовой уровень — то, с чего закупщик начинает чтение."""
+    state = safety.state_of(row)
+    return {
+        "safety": {
+            "state": state["state"],
+            "tone": state["tone"],
+            "title": state["title"],
+            "text": state["text"],
+            "incident": state["incident"],
+            "docs": safety.food_docs(row),
+            "supervised": safety.under_supervision(row),
+        },
+        "price": pricing.level(row),
+    }
+
+
+def _dossier(row: dict, city: str) -> dict:
+    everywhere, regions = reach.coverage(row)
+    return {
+        "profile": dossier.profile(row),
+        "registries": dossier.registries(row),
+        "coverage": {
+            "all": everywhere,
+            "regions": regions,
+            "reason": reach.reason(row, city),
+        },
+        "reviewsSummary": reviews.summary(row),
+    }
+
+
 def _team(row: dict, notes: dict, statuses: dict, checks: dict) -> dict:
     note = notes.get(row["id"]) or {}
     status = statuses.get(row["id"]) or {}
@@ -310,6 +365,9 @@ def _domain(website: str) -> str:
 EXPORT_COLUMNS = (
     ("Приоритет", lambda c: c["score"]),
     ("Вердикт", lambda c: c["verdict"]),
+    ("Санитарная история", lambda c: c["safety"]["title"]),
+    ("Уровень цен", lambda c: c["price"]["title"] + (" (оценка)" if c["price"]["estimate"] else "")),
+    ("Полнота профиля", lambda c: f'{c["profile"]["percent"]}%'),
     ("Название", lambda c: c["name"]),
     ("Тип", lambda c: c["typeTitle"]),
     ("Категории", lambda c: ", ".join(c["cats"])),
@@ -334,6 +392,7 @@ EXPORT_COLUMNS = (
     ("Оценка команды", lambda c: f'{c["commentsRating"]} из 5' if c["commentsRating"] else ""),
     ("Комментариев", lambda c: c["commentsCount"] or ""),
     ("Что уточнить", lambda c: "; ".join(c["ask"])),
+    ("Отзывы", lambda c: c["reviewsSummary"]["verdict"]),
     ("Источник", lambda c: c["source"]),
 )
 
