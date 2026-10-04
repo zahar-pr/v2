@@ -403,6 +403,16 @@ export default function App() {
       .catch(() => {});
   };
 
+  // Плашка проекта честна ровно до первой правки фильтров руками: как только срез
+  // перестал совпадать с проектом, подпись «подбор под сеть» снимается сама.
+  const projectOn = Boolean(
+    project
+      && meta
+      && onlySafe
+      && cats.join(',') === project.cats.join(',')
+      && city === (project.city || meta.labels.anyCity)
+  );
+
   const activeFilters = [
     query, onlyDocs, onlyVerified, onlyContacts, onlySafe, price, !delivers, statusFilter,
     cats.length > 0,
@@ -571,14 +581,29 @@ export default function App() {
               ))}
             </div>
 
-            {project && (
+            {projectOn && (
               <div className="projectbar">
-                <span className="projectbar__tag">Проект</span>
-                <b>{project.chain}</b>
-                <span className="projectbar__need">{project.need}</span>
-                <button type="button" onClick={() => { setProject(null); resetAll(); }}>
-                  Снять
-                </button>
+                <div className="projectbar__row">
+                  <span className="projectbar__tag">Подбор под сеть</span>
+                  <b>{project.chain}</b>
+                  <span className="projectbar__need" title={project.catTitles.join(', ')}>
+                    {[
+                      project.cityTitle,
+                      // полный список категорий растягивает плашку на пол-экрана телефона
+                      project.catTitles.slice(0, 3).join(', ').toLowerCase()
+                        + (project.catTitles.length > 3
+                          ? ` и ещё ${project.catTitles.length - 3}` : ''),
+                      'без санитарных замечаний',
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                  <button type="button" onClick={() => { setProject(null); resetAll(); }}>
+                    Снять
+                  </button>
+                </div>
+                <div className="projectbar__note">
+                  Это кандидаты из базы под такую закупку, а не действующие поставщики сети:
+                  такие списки сети не публикуют. Задача проекта — {project.need}.
+                </div>
               </div>
             )}
 

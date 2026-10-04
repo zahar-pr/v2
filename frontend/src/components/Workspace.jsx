@@ -57,7 +57,15 @@ export default function Workspace({ data, statuses, loading, onPick, onOpen, onC
 
               <div className="ws__hint">
                 Проект — это сеть-заказчик со своим городом и набором продуктов. Выберите
-                проект, и выдача сразу отфильтруется под его закупку.
+                проект, и выдача отфильтруется под его закупку.
+              </div>
+              <div className="ws__warn">
+                <b>Цифры в карточках — это кандидаты из нашей базы под такую закупку, а не
+                список действующих поставщиков сети.</b> Кто у кого закупает на самом деле,
+                торговые сети не публикуют. Набор категорий выведен из кухни сети, а не из её
+                договоров. Единственное, что здесь привязано к конкретной сети документально, —
+                красная строка о санитарных решениях: это её бывшие поставщики, со ссылками на
+                публикации в карточках.
               </div>
 
               <div className="ws__grid">
@@ -79,18 +87,20 @@ export default function Workspace({ data, statuses, loading, onPick, onOpen, onC
                     </div>
                     {item.incidents.length > 0 && (
                       <div className="wscard__alarm">
-                        {item.incidents.length}{' '}
+                        По публикациям, {item.incidents.length}{' '}
                         {plural(item.incidents.length, 'поставщик', 'поставщика', 'поставщиков')}
                         {' '}этой сети попал
                         {item.incidents.length === 1 ? '' : 'и'} под санитарные решения
                       </div>
                     )}
                     <div className="wscard__foot">
-                      <span>
+                      <span title="Сколько компаний в нашей базе подходит под этот срез">
                         <b>{item.found}</b>{' '}
-                        {plural(item.found, 'поставщик', 'поставщика', 'поставщиков')}
+                        {plural(item.found, 'кандидат', 'кандидата', 'кандидатов')}
                       </span>
-                      <span className="wscard__safe"><b>{item.safe}</b> без замечаний</span>
+                      <span className="wscard__safe">
+                        <b>{item.safe}</b> без замечаний
+                      </span>
                     </div>
                   </button>
                 ))}

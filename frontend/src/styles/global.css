@@ -1503,6 +1503,12 @@ td.cell--muted { color: var(--text-2); }
 .ws__cell b { display: block; font-family: var(--font-display); font-size: 20px; }
 .ws__cell span { font-size: 11px; color: var(--text-3); }
 .ws__hint { font-size: 13px; line-height: 1.55; color: var(--text-2); }
+.ws__warn {
+  margin-top: -8px; padding: 11px 13px; border-radius: var(--r-s);
+  background: var(--warn-bg); color: var(--warn-ink);
+  font-size: 12px; line-height: 1.55;
+}
+.ws__warn b { font-weight: 500; }
 .ws__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 10px; }
 
 .wscard {
@@ -1543,9 +1549,10 @@ td.cell--muted { color: var(--text-2); }
 .wsline__meta { font-size: 12px; color: var(--text-3); }
 
 .projectbar {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 18px; border-bottom: 1px solid var(--line-hair); background: var(--surface-3);
 }
+.projectbar__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.projectbar__note { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--text-4); }
 .projectbar__tag {
   padding: 2px 9px; border-radius: var(--pill);
   background: var(--deep); color: var(--cyan); font-size: 11px;
