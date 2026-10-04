@@ -372,9 +372,25 @@ async def api_refresh(city: str = Body(""), token: str = Body("")):
     return {"indexed": await index.refresh_city(found)}
 
 
+_refreshing: set[str] = set()
+
+
 async def _ensure_city(city: str) -> None:
-    if not city:
+    """Город без индекса придётся подождать, город с индексом — нет.
+
+    Запрос к OpenStreetMap по крупному городу идёт десятки секунд. Держать на нём
+    открытый HTTP-запрос можно только когда показывать всё равно нечего. Если
+    данные по городу уже есть, выдача отдаётся сразу, а обновление уходит в фон.
+    """
+    if not city or index.is_fresh(city):
         return
+
+    if store.search(city=city, per_page=1)[1]:
+        if city not in _refreshing:
+            _refreshing.add(city)
+            _workers.append(asyncio.create_task(_refresh_quietly(city)))
+        return
+
     try:
         await index.ensure_city(city)
     except domain.PlaceNotFound:
@@ -382,6 +398,15 @@ async def _ensure_city(city: str) -> None:
     except domain.SourceUnavailable as error:
         if not store.search(city=city, per_page=1)[1]:
             raise HTTPException(503, f"Источник данных не ответил ({error}).")
+
+
+async def _refresh_quietly(city: str) -> None:
+    try:
+        await index.ensure_city(city)
+    except Exception:
+        pass
+    finally:
+        _refreshing.discard(city)
 
 
 def _require_supplier(supplier_id: str) -> None:

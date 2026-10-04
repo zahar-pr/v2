@@ -520,6 +520,10 @@ check(
     "неизвестный город -> 404",
     client.get("/api/suppliers", params={"city": "Атлантида"}).status_code == 404,
 )
+check(
+    "город с индексом отдаётся сразу, без похода в OpenStreetMap",
+    client.get("/api/suppliers", params={"city": "Казань"}).status_code == 200,
+)
 
 # ---------- санитарная история ----------
 
