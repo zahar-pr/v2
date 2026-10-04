@@ -3,23 +3,34 @@ import StatusPicker from './StatusPicker.jsx';
 import Comments from './Comments.jsx';
 import SafetyBadge from './SafetyBadge.jsx';
 import PriceTag from './PriceTag.jsx';
-import { setCheck } from '../api/client.js';
+import { getSimilar, setCheck } from '../api/client.js';
 import { ageText, checkedAt, dash, placeOf, plural, quoteLetter } from '../data/suppliers.js';
 
 export default function SupplierPanel({
   supplier, note, statuses, onNote, onStatus, onComment,
-  inCompare, compareFull, onCompare, onClose,
+  inCompare, compareFull, onCompare, onClose, filters, onOpen, compare,
 }) {
   const s = supplier;
   const [done, setDone] = useState(() => new Set(supplier.checksDone || []));
   const [allGaps, setAllGaps] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [alts, setAlts] = useState([]);
   const tel = (value) => value.replace(/[^+\d]/g, '');
   const reviews = s.reviewsSummary || {};
 
   useEffect(() => {
     setDone(new Set(supplier.checksDone || []));
   }, [supplier.id, supplier.checksDone]);
+
+  // Решение принимается сравнением, поэтому альтернативы лежат прямо в досье.
+  useEffect(() => {
+    let alive = true;
+    setAlts([]);
+    getSimilar(supplier.id, filters || {})
+      .then((answer) => { if (alive) setAlts(answer.items || []); })
+      .catch(() => { if (alive) setAlts([]); });
+    return () => { alive = false; };
+  }, [supplier.id]);
 
   // Досье пересылают коллеге целиком, поэтому ссылка на него должна быть под рукой.
   const copyLink = () => {
@@ -386,6 +397,41 @@ export default function SupplierPanel({
             </div>
           </div>
 
+          {alts.length > 0 && (
+            <div>
+              <div className="section-title">Кто ещё возит то же самое</div>
+              <div className="audit__hint">
+                Тот же продукт и та же география, без санитарных замечаний. Порядок — по
+                вашему профилю приоритетов.
+              </div>
+              <div className="alts">
+                {alts.map((item) => (
+                  <div className="alt" key={item.id}>
+                    <div className={`prio prio--${item.level}`}>{item.score}</div>
+                    <button
+                      type="button" className="alt__body"
+                      onClick={() => onOpen && onOpen(item.id)}
+                    >
+                      <b>{item.name}</b>
+                      <span>
+                        {[item.typeTitle, item.city, item.priceLevel.title]
+                          .filter(Boolean).join(' · ')}
+                      </span>
+                      <small>{item.safety.title}</small>
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${(compare || []).includes(item.id) ? 'btn--in' : 'btn--ghost'}`}
+                      onClick={() => onCompare(item.id)}
+                    >
+                      {(compare || []).includes(item.id) ? 'В сравнении' : 'Сравнить'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <div className="section-title">Что мы уже проверили</div>
             <div className="audit__hint">
@@ -549,7 +595,7 @@ export default function SupplierPanel({
             <button
               type="button"
               className={`btn ${inCompare ? 'btn--in' : compareFull ? 'btn--full' : 'btn--ghost'}`}
-              onClick={onCompare}
+              onClick={() => onCompare(s.id)}
               disabled={compareFull}
             >
               {inCompare ? 'В сравнении' : compareFull ? 'Слот занят' : 'Сравнить'}

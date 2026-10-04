@@ -184,6 +184,21 @@ def api_export(
     )
 
 
+@app.get("/api/similar")
+def api_similar(
+    id: str = Query("", max_length=200),
+    owner: str = Depends(web.user_id),
+    chosen: web.Filters = web.Query_,
+    limit: int = Query(4, ge=1, le=8),
+):
+    """Альтернативы для досье: тот же продукт, та же география, без замечаний."""
+    row = store.get(id)
+    if row is None:
+        raise HTTPException(404, "Поставщик не найден")
+    rows = store.similar(row, chosen.weights, limit)
+    return {"items": web.cards(rows, chosen.weights, chosen.city)}
+
+
 @app.get("/api/suppliers/{supplier_id:path}")
 def api_supplier(
     supplier_id: str,

@@ -704,7 +704,10 @@ export default function App() {
           onComment={() => load(1, false)}
           inCompare={compare.includes(selected.id)}
           compareFull={compare.length >= MAX_COMPARE && !compare.includes(selected.id)}
-          onCompare={() => toggleCompare(selected.id)}
+          onCompare={toggleCompare}
+          compare={compare}
+          filters={{ city, preset, weights: weightsToString(weights) }}
+          onOpen={setSelId}
           onClose={() => setSelId(null)}
         />
       )}

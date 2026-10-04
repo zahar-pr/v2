@@ -55,6 +55,10 @@ export function getSupplier(id, filters) {
   return call('/api/suppliers/' + id + '?' + query(filters || {}));
 }
 
+export function getSimilar(id, filters) {
+  return call('/api/similar?' + query({ ...(filters || {}), id }));
+}
+
 export function getCallList(filters) {
   return call('/api/calllist?' + query(filters));
 }

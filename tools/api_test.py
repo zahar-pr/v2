@@ -714,6 +714,25 @@ check("памятка предупреждает про демо-данные", 
 check("памятка объясняет санитарную историю", "санитарная истори" in intro_jsx.lower())
 check("памятка объясняет уровень цен", "уровень цен" in intro_jsx.lower())
 
+# ---------- альтернативы в досье ----------
+
+alts = client.get("/api/similar", params={"id": "a"}).json()["items"]
+check("альтернативы находятся", len(alts) > 0, len(alts))
+check("себя в альтернативы не берём", all(item["id"] != "a" for item in alts))
+check(
+    "альтернативы без санитарных замечаний",
+    all(item["safety"]["state"] not in ("banned", "incident", "closed") for item in alts),
+)
+check(
+    "альтернативы того же продукта",
+    all(set(item["cats"]) & set(client.get("/api/suppliers/a").json()["cats"]) for item in alts),
+    [(i["id"], i["cats"]) for i in alts],
+)
+check(
+    "альтернативы для неизвестного поставщика -> 404",
+    client.get("/api/similar", params={"id": "нет-такого"}).status_code == 404,
+)
+
 # ---------- поиск по реквизитам ----------
 
 store.save_enrichment("c", {"inn": "1659077160"})

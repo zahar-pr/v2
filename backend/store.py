@@ -823,6 +823,43 @@ def _host(website: str | None) -> str:
     return "" if host in SOCIAL_HOSTS else host
 
 
+def similar(supplier: dict, weights: dict, limit: int = 4) -> list[dict]:
+    """Кто ещё возит то же самое туда же.
+
+    Решение принимается сравнением, а не чтением одной карточки. Поэтому в досье
+    нужен короткий список альтернатив: тот же продукт, та же география, без
+    санитарных замечаний. Сам поставщик и его однофамильцы с тем же ИНН из
+    подборки исключаются.
+    """
+    cats = [item for item in (supplier.get("cats") or "").split(",") if item and item not in GENERIC_CATS]
+    if not cats:
+        cats = [item for item in (supplier.get("cats") or "").split(",") if item]
+    if not cats:
+        return []
+
+    region = supplier.get("region") or ""
+    where = [
+        "id != ?",
+        "kind_class != 'retail'",
+        RISKY,
+        "(" + " OR ".join("cats LIKE ?" for _ in cats) + ")",
+    ]
+    params: list = [supplier["id"], *(f"%,{item},%" for item in cats)]
+    if region:
+        where.append("(region = ? OR delivers_all = 1 OR delivery_regions LIKE ?)")
+        params += [region, f"%,{region},%"]
+    if supplier.get("inn"):
+        where.append("inn != ?")
+        params.append(supplier["inn"])
+
+    rows = connect().execute(
+        f"SELECT * FROM suppliers WHERE {' AND '.join(where)} "
+        f"ORDER BY {TRUST_ORDER}, {priority_sql(weights)} DESC LIMIT ?",
+        (*params, limit),
+    ).fetchall()
+    return [row_to_dict(row) for row in rows]
+
+
 def best_defaults() -> dict:
     connection = connect()
     alive = "(phones != '[]' OR emails != '[]' OR comments_count > 0 OR reviews_source != '')"
