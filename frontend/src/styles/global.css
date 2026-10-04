@@ -1455,7 +1455,36 @@ td.cell--muted { color: var(--text-2); }
 
 /* ---------- кабинет Goulash Tech ---------- */
 
-.btn-compare--desk { background: var(--deep); }
+/* «Кабинет» — вход в рабочее пространство, с него начинается сценарий. На тёмной
+   шапке обычная кнопка выглядит такой же тёмной плашкой, поэтому она подсвечена
+   бирюзовой обводкой и постоянно расходится волнами: видно, что сюда можно нажать,
+   даже если мышь в другом конце экрана. Две волны со сдвигом в половину цикла —
+   чтобы круги шли непрерывно, а не вспышками. */
+.btn-compare--desk {
+  position: relative;
+  background: rgba(0, 225, 225, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(0, 225, 225, 0.45);
+}
+.btn-compare--desk::before,
+.btn-compare--desk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: ripple 2.4s ease-out infinite;
+}
+.btn-compare--desk::after { animation-delay: 1.2s; }
+/* Когда курсор уже на кнопке, звать больше некуда. */
+.btn-compare--desk:hover::before,
+.btn-compare--desk:hover::after { animation-play-state: paused; }
+.btn-compare--desk:hover { background: rgba(0, 225, 225, 0.24); }
+
+@keyframes ripple {
+  0% { box-shadow: 0 0 0 0 rgba(0, 225, 225, 0.55); }
+  70% { box-shadow: 0 0 0 12px rgba(0, 225, 225, 0.09); }
+  100% { box-shadow: 0 0 0 16px rgba(0, 225, 225, 0); }
+}
 
 .ws { display: flex; flex-direction: column; gap: 16px; padding: 4px 0 8px; }
 .ws__top {
