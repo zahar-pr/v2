@@ -457,6 +457,11 @@ export default function App() {
             <i />
             <span>{badge()}</span>
           </div>
+          {/* Заголовок страницы заменили логотипами клиентов, но h1 остаётся:
+              он нужен и поисковикам, и программам чтения с экрана. */}
+          <h1 className="offscreen">
+            Goulash Поставщики — поиск поставщиков продуктов питания для общепита
+          </h1>
           <ClientLogos />
 
           <div className="search">
