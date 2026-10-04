@@ -13,12 +13,21 @@ export default function SupplierPanel({
   const s = supplier;
   const [done, setDone] = useState(() => new Set(supplier.checksDone || []));
   const [allGaps, setAllGaps] = useState(false);
+  const [copied, setCopied] = useState(false);
   const tel = (value) => value.replace(/[^+\d]/g, '');
   const reviews = s.reviewsSummary || {};
 
   useEffect(() => {
     setDone(new Set(supplier.checksDone || []));
   }, [supplier.id, supplier.checksDone]);
+
+  // Досье пересылают коллеге целиком, поэтому ссылка на него должна быть под рукой.
+  const copyLink = () => {
+    const link = `${window.location.origin}/#/s/${encodeURIComponent(s.id)}`;
+    const done = () => { setCopied(true); window.setTimeout(() => setCopied(false), 2000); };
+    if (navigator.clipboard) navigator.clipboard.writeText(link).then(done).catch(() => {});
+    else done();
+  };
 
   const toggleCheck = (question) => {
     const next = new Set(done);
@@ -522,6 +531,9 @@ export default function SupplierPanel({
               disabled={compareFull}
             >
               {inCompare ? 'В сравнении' : compareFull ? 'Слот занят' : 'Сравнить'}
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={copyLink}>
+              {copied ? 'Ссылка скопирована' : 'Ссылка на досье'}
             </button>
           </div>
         </div>

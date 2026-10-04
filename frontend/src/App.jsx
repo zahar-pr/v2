@@ -16,7 +16,8 @@ import useNarrow from './hooks/useNarrow.js';
 import useTheme from './hooks/useTheme.js';
 import useDebounced from './hooks/useDebounced.js';
 import {
-  getCallList, getMeta, getNotes, getStatus, getSuppliers, getWorkspace, saveNote, setStatus,
+  getCallList, getMeta, getNotes, getStatus, getSupplier, getSuppliers, getWorkspace,
+  saveNote, setStatus,
 } from './api/client.js';
 import { plural, weightsToString } from './data/suppliers.js';
 
@@ -71,6 +72,7 @@ export default function App() {
   const [project, setProject] = useState(null);
   const [notes, setNotes] = useState({});
   const [showcase, setShowcase] = useState([]);
+  const [shared, setShared] = useState(null);
 
   const narrow = useNarrow();
   const [theme, toggleTheme] = useTheme();
@@ -153,6 +155,32 @@ export default function App() {
     setCompare(showcase.slice(0, 2).map((s) => s.id));
   }, [showcase]);
 
+  // Досье можно переслать коллеге: адрес вида #/s/<id> открывает ту же карточку.
+  const openId = () => {
+    const found = /^#\/s\/(.+)$/.exec(window.location.hash || '');
+    return found ? decodeURIComponent(found[1]) : '';
+  };
+
+  const wanted = useRef(openId());
+
+  // Карточки из ссылки может не быть в текущей выдаче — тогда тянем её отдельно.
+  useEffect(() => {
+    if (!selId || !meta) return;
+    if (items.some((s) => s.id === selId)) return;
+    if (shared && shared.id === selId) return;
+    getSupplier(selId, filters)
+      .then(setShared)
+      .catch(() => setShared(null));
+  }, [selId, meta, items]);
+
+  useEffect(() => {
+    // Пока входящая ссылка не прочитана, адрес не трогаем — иначе сами её и затрём.
+    if (wanted.current) return;
+    const target = selId ? `#/s/${encodeURIComponent(selId)}` : '';
+    if ((window.location.hash || '') === target) return;
+    window.history.replaceState(null, '', target || window.location.pathname);
+  }, [selId]);
+
   const load = useCallback(
     (nextPage, append) => {
       if (!meta) return undefined;
@@ -191,9 +219,14 @@ export default function App() {
   );
 
   useEffect(() => {
-    setSelId(null);
+    // Пришли по ссылке на досье — не закрываем его первой же загрузкой выдачи.
+    // Ссылку забираем только когда метаданные уже есть: до них load всё равно
+    // ничего не грузит, а разобрать адрес мы успеем ровно один раз.
+    if (!meta) return undefined;
+    setSelId(wanted.current || null);
+    wanted.current = '';
     return load(1, false);
-  }, [load]);
+  }, [load, meta]);
 
   useEffect(() => {
     if (!filtersOpen) return undefined;
@@ -270,10 +303,13 @@ export default function App() {
 
   const inCalls = (id) => calls.working.find((s) => s.id === id)
     || calls.suggest.find((s) => s.id === id);
-  const selected = items.find((s) => s.id === selId) || inCalls(selId) || null;
+  const selected = items.find((s) => s.id === selId)
+    || inCalls(selId)
+    || (shared && shared.id === selId ? shared : null);
   const compareItems = compare
     .map((id) => items.find((s) => s.id === id)
       || inCalls(id)
+      || (shared && shared.id === id ? shared : null)
       || showcase.find((s) => s.id === id))
     .filter(Boolean);
   const anyFilter = Boolean(query) || onlyDocs || onlyVerified || onlyContacts || onlySafe
