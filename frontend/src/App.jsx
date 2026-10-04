@@ -218,13 +218,21 @@ export default function App() {
     [meta, filters]
   );
 
+  // Открытую карточку закрывает смена фильтров, а не каждый перезапуск загрузки:
+  // пока условия те же, пришедшее по ссылке досье остаётся на экране.
+  const filtersKey = JSON.stringify(filters);
+  const lastFilters = useRef('');
+
   useEffect(() => {
-    // Пришли по ссылке на досье — не закрываем его первой же загрузкой выдачи.
-    // Ссылку забираем только когда метаданные уже есть: до них load всё равно
-    // ничего не грузит, а разобрать адрес мы успеем ровно один раз.
     if (!meta) return undefined;
-    setSelId(wanted.current || null);
-    wanted.current = '';
+    const changed = lastFilters.current !== '' && lastFilters.current !== filtersKey;
+    lastFilters.current = filtersKey;
+    if (changed) {
+      setSelId(null);
+    } else if (wanted.current) {
+      setSelId(wanted.current);
+      wanted.current = '';
+    }
     return load(1, false);
   }, [load, meta]);
 
