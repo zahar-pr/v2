@@ -610,6 +610,20 @@ check(
 )
 card_full = client.get("/api/suppliers/a").json()
 check("в карточке есть досье", card_full["profile"]["total"] > 10)
+check("в карточке есть журнал проверок", len(card_full["audit"]) == 6, card_full.get("audit"))
+check(
+    "журнал различает «не смотрели» и «смотрели, пусто»",
+    {step["state"] for step in card_full["audit"]} <= {"found", "empty", "pending"},
+)
+check(
+    "санитарная сверка в журнале всегда свежая",
+    card_full["audit"][-1]["when"] == "сегодня",
+    card_full["audit"][-1],
+)
+check(
+    "без сайта проверка сайта не висит в очереди",
+    dossier.audit({"website": ""})[3]["state"] == "empty",
+)
 check("в карточке есть реестры", len(card_full["registries"]) == 9)
 check("в карточке есть санитарный вывод", bool(card_full["safety"]["title"]))
 check("в карточке есть уровень цен", bool(card_full["priceLevel"]["title"]))

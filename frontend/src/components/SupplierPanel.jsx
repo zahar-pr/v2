@@ -387,6 +387,28 @@ export default function SupplierPanel({
           </div>
 
           <div>
+            <div className="section-title">Что мы уже проверили</div>
+            <div className="audit__hint">
+              Пустое поле в карточке само по себе ничего не говорит. Здесь видно, какой
+              источник уже смотрели, когда и что он ответил.
+            </div>
+            <div className="audit">
+              {s.audit.map((step) => (
+                <div className={`astep astep--${step.state}`} key={step.title}>
+                  <i aria-hidden="true">
+                    {step.state === 'found' ? '✓' : step.state === 'pending' ? '…' : '—'}
+                  </i>
+                  <div className="astep__body">
+                    <b>{step.title}</b>
+                    <span>{step.what}</span>
+                    <small>{[step.when, step.note].filter(Boolean).join(' · ')}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <div className="section-title">Проверить самому</div>
             <div className="regs__hint">
               {s.inn

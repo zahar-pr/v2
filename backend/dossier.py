@@ -10,6 +10,7 @@
 не заканчивается тупиком: либо факт, либо точный адрес, где этот факт лежит.
 """
 
+import time
 from urllib.parse import quote
 
 # Реестры, которые отвечают на вопросы закупщика. Порядок — от санитарии к деньгам.
@@ -148,3 +149,109 @@ def profile(supplier: dict) -> dict:
         "total": total,
         "percent": round(100 * len(known) / total),
     }
+
+
+# Журнал проверок: что сервис уже сверил по этой компании и чем это кончилось.
+# Пустое поле в карточке само по себе ничего не объясняет — закупщик не знает,
+# то ли источник не смотрели, то ли смотрели и там действительно пусто. Разница
+# принципиальная: в первом случае ждать, во втором сразу спрашивать у поставщика.
+FOUND = "found"
+EMPTY = "empty"
+PENDING = "pending"
+
+
+def audit(supplier: dict) -> list[dict]:
+    rows = [
+        _step(
+            "Организации на карте",
+            "OpenStreetMap: название, адрес, координаты, вид деятельности",
+            supplier.get("checked_at"),
+            bool(supplier.get("address") or supplier.get("lat")),
+        ),
+        _step(
+            "ЕГРЮЛ",
+            "Юрлицо, руководитель, ОГРН, запись о прекращении",
+            supplier.get("egrul_checked"),
+            bool(supplier.get("manager") or supplier.get("ogrn")),
+        ),
+        _step(
+            "ФНС: Прозрачный бизнес",
+            "ИНН, основной ОКВЭД, официальный статус организации",
+            supplier.get("fns_checked"),
+            bool(supplier.get("okved") or supplier.get("legal_status")),
+        ),
+        _step(
+            "Сайт поставщика",
+            "Контакты, условия отгрузки, документы на продукцию",
+            supplier.get("enriched_at"),
+            bool(supplier.get("about") or supplier.get("certs") or supplier.get("moq")),
+            skipped=not supplier.get("website") and "сайт не найден, проверять нечего",
+        ),
+        _step(
+            "Справочники отзывов",
+            "Оценка и число отзывов по конкретной организации",
+            supplier.get("reviews_checked"),
+            bool(supplier.get("reviews_source")),
+        ),
+        # Санитарные перечни сверяются при каждой отдаче карточки, а не по расписанию:
+        # список решений лежит в коде, сверка по ИНН и названию стоит микросекунды.
+        _step(
+            "Перечни санитарных решений",
+            "Приостановки производства и массовые отравления",
+            time.time(),
+            True,
+            note=_sanitary_note(supplier),
+        ),
+    ]
+    return rows
+
+
+def _sanitary_note(supplier: dict) -> str:
+    state = (supplier.get("safety_state") or "").strip()
+    if state in ("banned", "incident"):
+        return "компания найдена в перечне — подробности выше"
+    return "компания в перечне не числится"
+
+
+def _step(
+    title: str,
+    what: str,
+    moment,
+    got: bool,
+    skipped: str | bool = False,
+    note: str = "",
+) -> dict:
+    if skipped:
+        return {
+            "title": title,
+            "what": what,
+            "state": EMPTY,
+            "when": "",
+            "note": skipped if isinstance(skipped, str) else "проверять нечего",
+        }
+    if not moment:
+        return {
+            "title": title,
+            "what": what,
+            "state": PENDING,
+            "when": "",
+            "note": "в очереди на проверку",
+        }
+    return {
+        "title": title,
+        "what": what,
+        "state": FOUND if got else EMPTY,
+        "when": _when(moment),
+        "note": note or ("данные найдены" if got else "источник ответил, данных нет"),
+    }
+
+
+def _when(moment: float) -> str:
+    days = int((time.time() - moment) // 86400)
+    if days <= 0:
+        return "сегодня"
+    if days == 1:
+        return "вчера"
+    if days < 30:
+        return f"{days} дн. назад"
+    return time.strftime("%d.%m.%Y", time.localtime(moment))

@@ -292,6 +292,7 @@ def _dossier(row: dict, city: str) -> dict:
     return {
         "profile": dossier.profile(row),
         "registries": dossier.registries(row),
+        "audit": dossier.audit(row),
         "coverage": {
             "all": everywhere,
             "regions": regions,
