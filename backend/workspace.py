@@ -11,6 +11,7 @@ Goulash Tech ведёт закупки для девятнадцати сете�
 закупка под новый город начинается с того же проекта.
 """
 
+import time
 from dataclasses import dataclass
 
 import catalog
@@ -184,9 +185,24 @@ def _name_of(name_key: str) -> str:
     return row["name"] if row else name_key
 
 
+# Счётчики по девятнадцати проектам — это девятнадцать пар запросов по всей базе.
+# Меняются они редко (индекс пополняется раз в несколько минут), а кабинет
+# открывают часто, поэтому результат живёт минуту.
+PROJECTS_TTL = 60
+_cache: dict = {"at": 0.0, "projects": []}
+
+
+def _projects() -> list[dict]:
+    now = time.time()
+    if not _cache["projects"] or now - _cache["at"] > PROJECTS_TTL:
+        _cache["projects"] = [card(item) for item in PROJECTS]
+        _cache["at"] = now
+    return _cache["projects"]
+
+
 def overview() -> dict:
     counts = team.status_counts()
-    projects = [card(item) for item in PROJECTS]
+    projects = _projects()
     return {
         "company": COMPANY,
         "city": BASE_CITY,

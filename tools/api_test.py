@@ -682,6 +682,12 @@ check(
     any(p["incidents"] for p in desk["projects"]),
 )
 check("в кабинете видна воронка", "working" in desk and "quoted" in desk)
+check(
+    "счётчик карточек не считает фасеты",
+    store.count_for(category="bakery") == client.get(
+        "/api/suppliers", params={"category": "bakery"}
+    ).json()["total"],
+)
 check("кабинет один и без логина", "login" not in str(desk).lower())
 check(
     "у каждой сети-клиента свой проект",

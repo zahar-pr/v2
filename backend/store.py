@@ -664,9 +664,47 @@ def mark_refreshed(city: str, found: int, note: str = "") -> None:
         connection.commit()
 
 
-def count_for(**filters) -> int:
-    _, total, _ = search(per_page=1, **filters)
-    return total
+def count_for(
+    query: str = "",
+    category: str = "",
+    region: str = "",
+    city: str = "",
+    only_docs: bool = False,
+    only_verified: bool = False,
+    only_contacts: bool = False,
+    only_safe: bool = False,
+    price: str = "",
+    delivers: bool = True,
+    kinds: tuple[str, ...] = (),
+    status: str = "",
+    **_ignored,
+) -> int:
+    """Просто число подходящих карточек.
+
+    Раньше это был `search(per_page=1)`, то есть вместе со счётчиком считались
+    фасеты: двенадцать SUM(CASE ...) по категориям плюс разбивка по типам — и всё
+    это по всей таблице. Кабинету нужно 38 таких счётчиков на 19 проектов, и на
+    бесплатном тарифе Render страница просто не дожидалась ответа.
+    """
+    base, base_values = _conditions(
+        query,
+        region,
+        city,
+        only_docs,
+        only_verified,
+        only_contacts,
+        only_safe,
+        price,
+        delivers,
+        status,
+    )
+    by_cat, cat_values = _category_clause(category)
+    by_kind, kind_values = _kind_clause(kinds)
+    condition = " AND ".join([*base, *by_cat, *by_kind])
+    params = [*base_values, *cat_values, *kind_values]
+    return connect().execute(
+        f"SELECT COUNT(*) FROM suppliers WHERE {condition}", tuple(params)
+    ).fetchone()[0]
 
 
 def relax_options(filters: dict, labels: dict) -> list[dict]:
